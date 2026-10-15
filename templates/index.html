@@ -230,10 +230,10 @@
                 <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
                     <div class="flex items-center gap-3 flex-1 min-w-0 pr-2">
                         <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskDone(${t.id}, this.checked)" class="w-5 h-5 rounded accent-[#00F5A0] cursor-pointer flex-shrink-0">
-                        <span class="text-xs sm:text-sm ${t.done ? 'line-through text-slate-500' : 'text-slate-100 font-medium'} truncate">${t.title}</span>
+                        <span class="text-xs sm:text-sm ${t.done ? 'line-through text-slate-500' : 'text-slate-100 font-medium'} truncate">${LifePlanner.escapeHtml(t.title)}</span>
                     </div>
                     <div class="flex items-center gap-1.5 flex-shrink-0">
-                        <span class="text-[10px] font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded">${t.est_minutes}m</span>
+                        <span class="text-[10px] font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded">${parseInt(t.est_minutes) || 30}m</span>
                         <button onclick="deleteTask(${t.id})" aria-label="删除任务" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/10 active:scale-90 transition-colors text-xs">✕</button>
                     </div>
                 </div>
@@ -677,9 +677,10 @@
             const res = await LifePlanner.request('/api/ai/daily-plan', { method: 'POST' });
             if (res && res.tip) {
                 document.getElementById('ai-daily-banner').classList.remove('hidden');
-                document.getElementById('ai-daily-text').innerText = res.tip;
+                const badge = res.source === 'offline_mock' ? '【⚠️ 本地规则参考】' : '【✨ AI智能编排】';
+                document.getElementById('ai-daily-text').innerText = `${badge} ${res.tip}`;
             }
-            LifePlanner.toast('AI 规划已生成！', 'success');
+            LifePlanner.toast(res.source === 'offline_mock' ? '今日规划已生成 (本地规则模式)' : 'AI 规划已生成！', 'success');
             loadTasks();
         } catch (e) {
             console.error(e);

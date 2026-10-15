@@ -59,21 +59,18 @@ def upsert_daily_log(db: Session, user_id: int, log_in: DailyLogCreate) -> Daily
         return new_log
 
 def calculate_streak(db: Session, user_id: int = 1) -> int:
-    """计算连续记录天数"""
+    """计算连续记录天数 (单次查询优化，避免 N+1 循环)"""
     today = datetime.date.today()
+    dates = {row[0] for row in db.query(DailyLog.date).filter(DailyLog.user_id == user_id).all()}
+    if not dates:
+        return 0
+
     streak = 0
     curr = today
-    
-    # 允许今天如果还没写，从昨天开始算
-    today_has_log = db.query(DailyLog).filter(DailyLog.user_id == user_id, DailyLog.date == today).first() is not None
-    if not today_has_log:
+    if curr not in dates:
         curr = today - datetime.timedelta(days=1)
 
-    while True:
-        log = db.query(DailyLog).filter(DailyLog.user_id == user_id, DailyLog.date == curr).first()
-        if log:
-            streak += 1
-            curr = curr - datetime.timedelta(days=1)
-        else:
-            break
+    while curr in dates:
+        streak += 1
+        curr -= datetime.timedelta(days=1)
     return streak

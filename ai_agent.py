@@ -82,6 +82,33 @@ def assemble_user_context(db: Session, user_id: int = 1) -> str:
     return "\n".join(lines)
 
 
+def check_crisis_content(text: str) -> Optional[Dict[str, Any]]:
+    """
+    【规划书第4节 规则3 绝对安全防线】
+    确定性前置危机筛查（不依赖模型、不依赖网络）。
+    若检测到自伤、轻生、严重危机，瞬间短路拦截，输出关怀与专业救助热线。
+    """
+    if not text:
+        return None
+    crisis_keywords = [
+        "不想活", "不想活了", "想死", "想自杀", "自杀", "自残", "割腕", "跳楼", "轻生", 
+        "结束生命", "活着没意思", "去死", "不想存在", "想结束这一切", "活不下去了", "好绝望不想活"
+    ]
+    text_clean = text.replace(" ", "").lower()
+    if any(k in text_clean for k in crisis_keywords):
+        return {
+            "is_crisis": True,
+            "conclusion": "必须停止规划并寻求专业支持",
+            "reason": "生命与身心健康是所有人生成长与目标存在的绝对前提。感受到你此刻可能正在承受巨大的心理痛苦与绝望，此时任何待办与目标都不及你的生命安危重要。请停下所有规划，给自己一个安全的保护空间。",
+            "pros": "向外界发出求助是勇敢的自救，能及时获得医学、专业心理咨询与身边人的关怀陪伴，渡过眼前的至暗时刻。",
+            "cons_risks": "独自一人默默承受极度痛苦容易陷入认知隧道与不可逆的高危行动，伤害会永远剥夺未来的一切可能。",
+            "alternative": "请立即放下手头所有事情，联系你最信任的亲人或朋友陪在身边。并请立即拨打以下 24 小时全国免费专业心理援助热线获取支持：\n• 全国希望 24 小时生命救助热线：400-161-9995\n• 北京心理危机研究与干预中心热线：010-82951332 或 800-810-1117\n• 共青团青少年心理咨询援助热线：12355\n• 若情况紧急有即时危险，请立即拨打 110 或 120 寻求保护！",
+            "goal_relation": "活着才有一切希望。没有任何一项世俗目标值得以生命与健康为代价，请务必珍视自己。",
+            "source": "crisis_safety_guard"
+        }
+    return None
+
+
 def get_ai_client() -> Optional[OpenAI]:
     """获取 OpenAI 协议客户端"""
     if not settings.AI_API_KEY:
@@ -100,13 +127,35 @@ def ask_advisor(db: Session, user_id: int, question: str) -> Dict[str, Any]:
     """
     D2. 决策顾问 (Ask Advisor)
     严格按 6 段式结构生成分析：
-    1. 结论 (建议做 / 不建议做 / 可以但有条件)
+    1. 结论 (建议做 / 不建议做 / 可以但有条件 / 必须停止规划并寻求专业支持)
     2. 理由 (结合目标、现状与近期记录)
     3. 好处 (短期与长期正向收益)
     4. 坏处/风险 (短期代价与潜在危机)
     5. 如果要做，怎么做更好 (折中优化方案与防线)
     6. 与目标的关系 (推动或阻碍了哪项目标)
     """
+    # 1. 确定性前置极端危机筛查 (P0-2)
+    crisis_res = check_crisis_content(question)
+    if crisis_res:
+        full_answer_text = (
+            f"【结论】: {crisis_res['conclusion']}\n\n"
+            f"【理由】: {crisis_res['reason']}\n\n"
+            f"【好处】: {crisis_res['pros']}\n\n"
+            f"【坏处与风险】: {crisis_res['cons_risks']}\n\n"
+            f"【折中优化方案】: {crisis_res['alternative']}\n\n"
+            f"【与目标的关系】: {crisis_res['goal_relation']}"
+        )
+        msg = AiMessage(
+            user_id=user_id,
+            mode="advisor",
+            question=question,
+            answer=full_answer_text
+        )
+        db.add(msg)
+        db.commit()
+        crisis_res["full_text"] = full_answer_text
+        return crisis_res
+
     context_str = assemble_user_context(db, user_id)
     profile = profile_service.get_or_create_profile(db, user_id)
     health = profile.health_info or {}
@@ -132,6 +181,7 @@ def ask_advisor(db: Session, user_id: int, question: str) -> Dict[str, Any]:
 """
 
     result_dict = None
+    source = "ai_model"
 
     if client:
         try:
@@ -141,11 +191,9 @@ def ask_advisor(db: Session, user_id: int, question: str) -> Dict[str, Any]:
                     {"role": "system", "content": SYSTEM_PROMPT_TEMPLATE},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3,
-                response_format={"type": "json_object"} if "json" in settings.AI_MODEL.lower() or "gpt" in settings.AI_MODEL.lower() or "deepseek" in settings.AI_MODEL.lower() else None
+                temperature=0.3
             )
             raw_text = response.choices[0].message.content.strip()
-            # 兼容 Markdown json 代码块
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("```")[1]
                 if raw_text.startswith("json"):
@@ -155,47 +203,53 @@ def ask_advisor(db: Session, user_id: int, question: str) -> Dict[str, Any]:
             print(f"[AI Agent] 线上调用失败，使用智能规则引擎降级: {e}")
 
     if not result_dict:
-        # 本地智能降级决策（基于用户真实档案与启发式推演，确保 100% 可靠性）
-        q_lower = question.lower()
+        source = "offline_mock"
+        # 本地智能降级决策（基于用户真实档案与启发式推演）
         if "熬夜" in question or "晚睡" in question or "球赛" in question or "通宵" in question:
+            sleep_habit = health.get('sleep_habit') or '常规作息'
+            vision_hint = f"「{profile.vision[:20]}」" if profile.vision else "「保持自律高效」"
             result_dict = {
                 "conclusion": "可以但有条件",
-                "reason": f"你的作息习惯是 {health.get('sleep_habit', '常规作息')}，愿景是「{profile.vision[:20] if profile.vision else '保持高精力'}」。偶尔的兴趣热爱能释放工作压力，但无防护的通宵会直接击穿明天的专注力与深度工作状态。",
-                "pros": "释放多巴胺与精神压力，享受体育竞技热血或心仪兴趣的当下快乐，维系个人生活愉悦感。",
-                "cons_risks": "短期次日皮质醇飙升、大脑认知与反应迟钝、学习效率断崖下跌；若演变为连续少睡，将诱发免疫力下降与拖延借口。",
-                "alternative": "① 今晚20:00-22:00先补觉90分钟储备精力；② 赛中只饮温水或淡茶，严禁高糖炸鸡夜宵；③ 明天工作安排以事务性为主，中午必须深度小憩30分钟。",
-                "goal_relation": "对「健康与体魄」及明天的「深度学习进度」产生即时负向冲击，但合理的情绪调剂有助于长期心理韧性。"
+                "reason": f"结合你的作息习惯（{sleep_habit}）与长远愿景（{vision_hint}），偶尔的兴趣热爱有助于心理减压，但缺乏准备的通宵会直接击穿次日的深度认知与工作效率。",
+                "pros": "释放多巴胺与精神压力，享受当下赛事的激情，维系个人生活愉悦感。",
+                "cons_risks": "短期次日皮质醇飙升、大脑反应迟钝；连续少睡将诱发免疫力下滑与精力崩溃。",
+                "alternative": "① 今晚20:00-22:00先补觉90分钟储备精力；② 赛中饮用温水，避免高热量油炸夜宵；③ 明天中午必须深度小憩30分钟。",
+                "goal_relation": "对「身体健康」产生短期负向波动，但合理的情绪调剂有助于长期心理韧性。"
             }
         elif "吃火锅" in question or "吃" in question or "奶茶" in question or "夜宵" in question:
-            allergy = health.get("allergy_or_disease", "无")
-            taboo = health.get("taboo", "无")
-            diet_pref = health.get("diet_pref", "均衡")
+            allergy = health.get("allergy_or_disease") or "无已知过敏"
+            taboo = health.get("taboo") or "无特定忌口"
+            diet_pref = health.get("diet_pref") or "均衡营养"
             result_dict = {
                 "conclusion": "可以但有条件",
-                "reason": f"结合你的健康档案（偏好: {diet_pref}，过敏/限制: {allergy}），吃美食是重要的社交与心理慰藉，关键在于摄入构成而非完全苦行僧式节食。",
-                "pros": "饱腹感与幸福指数提升，缓解控食焦虑，有利于人际关系破冰或周末奖励机制。",
+                "reason": f"结合你的健康底座（偏好: {diet_pref}，过敏/限制: {allergy}，忌口: {taboo}），享受美食是健康生活的一部分，关键在于摄入构成而非绝对禁绝。",
+                "pros": "饱腹感与幸福指数提升，缓解控食焦虑，有利于人际社交或阶段性自我奖励。",
                 "cons_risks": "若摄入高钠高油重辣锅底，次日晨起水肿明显，消化道负荷增加；且过量精制糖易导致血糖过山车与午后嗜睡。",
-                "alternative": f"① 避开既往限制项（{allergy}）；② 优先选择清汤/番茄/菌汤锅底，先涮高蛋白瘦肉与绿叶菜；③ 蘸料以生抽香油葱蒜为主，避开高热量麻酱；④ 晚餐后散步30分钟消食。",
-                "goal_relation": "只要热量不失控，对体态目标影响在可控波动范围内；若放纵暴食则会拉长健康减脂目标的周期。"
+                "alternative": f"① 严守避险底线（避开: {allergy}）；② 优先选择清汤/番茄锅底，多涮优质蛋白瘦肉与蔬菜；③ 蘸料以生抽醋蒜为主，避开高热量麻酱；④ 饭后散步30分钟消食。",
+                "goal_relation": "控制热量与成分则影响有限；若放纵暴食则会拉长健康与体魄目标的周期。"
             }
         elif "辞职" in question or "自媒体" in question or "创业" in question:
             result_dict = {
                 "conclusion": "可以但有条件",
-                "reason": f"你目前在 {profile.industry or '当前'} 行业拥有 {profile.years_of_work or '数'} 年经验。转型自媒体或轻资产创业符合追求更大杠杆的长期愿景，但必须警惕现金流断裂与初期流量不确定性带来的生存焦虑。",
+                "reason": f"你目前在 {profile.industry or '现有'} 行业拥有 {profile.years_of_work or 0} 年经验。转型自媒体或轻资产创业符合追求更大杠杆的长期愿景，但必须警惕现金流断裂与初期流量不确定性带来的生存焦虑。",
                 "pros": "掌握个人IP杠杆，工作时间自主权翻倍，直接享受全流程商业闭环与能力复利。",
                 "cons_risks": "短期0收入冷启动期平均需6-12个月；丧失稳定社保与职场资源；自律要求极高，极易陷入自我怀疑与作息紊乱。",
                 "alternative": "① 坚持「副业验证法」：在当前工作之余，利用每天可支配的专注时间，跑通第一单付费或连续产出20篇精品内容验证网感；② 储备至少能支撑12-18个月正常生活的无风险备用金；③ 设定6个月的里程碑考核线。",
                 "goal_relation": "与「实现时间自由与顶尖实践者」愿景高度契合，但短期若无充分准备，将严重偏离目前的财务安全底线。"
             }
         else:
+            vision_hint = f"「{profile.vision[:25]}」" if profile.vision else "不断精进"
             result_dict = {
                 "conclusion": "可以但有条件",
-                "reason": f"结合你的长远愿景「{profile.vision[:25] if profile.vision else '不断精进'}」以及当前的精力配额，任何行动的关键衡量标准在于：它是否为你提供长期复利，还是仅仅在消耗你的注意力资产。",
+                "reason": f"结合你的长远愿景（{vision_hint}）以及当前的精力配额，任何行动的关键衡量标准在于：它是否为你提供长期复利，还是仅仅在消耗你的注意力资产。",
                 "pros": "拓宽探索边界，带来新的认知反馈或短期情绪价值。",
                 "cons_risks": "可能挤占核心目标的投入时长，造成注意力碎片化与精力损耗。",
                 "alternative": "采取最小可行性测试（MVP思维）：先投入15-30分钟进行试探，若产出与反馈符合预期再扩大配额。",
                 "goal_relation": "取决于具体执行质量。如果服务于核心成长则为助力，若为逃避困难的代偿行为则会拉大与目标的距离。"
             }
+
+    result_dict["source"] = source
+    result_dict["is_crisis"] = False
 
     # 存入数据库历史消息
     full_answer_text = (
@@ -219,7 +273,7 @@ def ask_advisor(db: Session, user_id: int, question: str) -> Dict[str, Any]:
     return result_dict
 
 
-def generate_daily_plan(db: Session, user_id: int = 1) -> Dict[str, Any]:
+def generate_daily_plan(db: Session, user_id: int = 1, auto_apply: bool = True) -> Dict[str, Any]:
     """
     D1. 每日规划 (Daily Plan)
     输出 3-5 个最重要的核心任务（服务于哪个目标、预估耗时）+ 饮食作息提醒 + 鼓励/警醒。
@@ -254,6 +308,7 @@ def generate_daily_plan(db: Session, user_id: int = 1) -> Dict[str, Any]:
 """
 
     result_dict = None
+    source = "ai_model"
 
     if client:
         try:
@@ -273,8 +328,10 @@ def generate_daily_plan(db: Session, user_id: int = 1) -> Dict[str, Any]:
             result_dict = json.loads(raw.strip())
         except Exception as e:
             print(f"[AI Agent] Daily Plan 线上调用异常，切换智能生成: {e}")
+            result_dict = None
 
     if not result_dict:
+        source = "offline_mock"
         # 基于当前真实目标动态匹配生成
         tasks_list = []
         if goals:
@@ -304,24 +361,27 @@ def generate_daily_plan(db: Session, user_id: int = 1) -> Dict[str, Any]:
             "tip": "伟大来自于每天微小确定性的重复累加。不追求一天的爆发，而追求连续多天不中断的节奏感！"
         }
 
-    # 自动将 AI 推荐的任务写入数据库 tasks 表（若今日尚未添加该任务）
-    today = datetime.date.today()
-    for t_item in result_dict.get("tasks", []):
-        exists = db.query(Task).filter(
-            Task.user_id == user_id,
-            Task.date == today,
-            Task.title == t_item["title"]
-        ).first()
-        if not exists:
-            new_task = Task(
-                user_id=user_id,
-                goal_id=t_item.get("goal_id"),
-                date=today,
-                title=t_item["title"],
-                est_minutes=t_item.get("est_minutes", 30),
-                done=False
-            )
-            db.add(new_task)
+    result_dict["source"] = source
+
+    # 仅在 auto_apply 为真时写入 tasks 表（避免静默污染）
+    if auto_apply:
+        today = datetime.date.today()
+        for t_item in result_dict.get("tasks", []):
+            exists = db.query(Task).filter(
+                Task.user_id == user_id,
+                Task.date == today,
+                Task.title == t_item["title"]
+            ).first()
+            if not exists:
+                new_task = Task(
+                    user_id=user_id,
+                    goal_id=t_item.get("goal_id"),
+                    date=today,
+                    title=t_item["title"],
+                    est_minutes=t_item.get("est_minutes", 30),
+                    done=False
+                )
+                db.add(new_task)
 
     # 存入历史
     msg = AiMessage(
@@ -372,7 +432,7 @@ def breakdown_goal(db: Session, user_id: int, goal_title: str, goal_desc: Option
             )
             content = res.choices[0].message.content.strip()
             stages = goal_service.parse_breakdown_markdown(content)
-            return {"plan": content, "stages": stages, "goal_title": goal_title}
+            return {"plan": content, "stages": stages, "goal_title": goal_title, "source": "ai_model"}
         except Exception as e:
             print(f"[AI Agent] Breakdown 线上异常: {e}")
 
@@ -457,7 +517,7 @@ def breakdown_goal(db: Session, user_id: int, goal_title: str, goal_desc: Option
             ]
         }
     ]
-    return {"plan": plan_text, "stages": stages, "goal_title": goal_title}
+    return {"plan": plan_text, "stages": stages, "goal_title": goal_title, "source": "offline_mock"}
 
 
 def generate_review(db: Session, user_id: int = 1, review_type: str = "daily", target_date_str: Optional[str] = None) -> Dict[str, Any]:
@@ -475,6 +535,7 @@ def generate_review(db: Session, user_id: int = 1, review_type: str = "daily", t
             pass
 
     client = get_ai_client()
+    source = "ai_model"
 
     if review_type == "daily":
         today_tasks = goal_service.get_tasks(db, user_id=user_id, target_date=today)
@@ -526,8 +587,10 @@ def generate_review(db: Session, user_id: int = 1, review_type: str = "daily", t
                 result_dict = json.loads(raw.strip())
             except Exception as e:
                 print(f"[AI Agent] Daily Review 线上异常: {e}")
+                result_dict = None
 
         if not result_dict:
+            source = "offline_mock"
             # 智能降级启发式复盘
             study_m = today_log.study_minutes if today_log else 0
             task_ratio = f"{done_count}/{total_tasks}" if total_tasks > 0 else "无预设任务"
@@ -584,8 +647,10 @@ def generate_review(db: Session, user_id: int = 1, review_type: str = "daily", t
                 result_dict = json.loads(raw.strip())
             except Exception as e:
                 print(f"[AI Agent] Weekly Review 线上异常: {e}")
+                result_dict = None
 
         if not result_dict:
+            source = "offline_mock"
             goals_summary_str = "、".join([f"「{g.title}」(当前进度{g.progress}%)" for g in goals[:3]]) if goals else "目标系统搭建中"
             result_dict = {
                 "type": "weekly",
@@ -595,6 +660,8 @@ def generate_review(db: Session, user_id: int = 1, review_type: str = "daily", t
                 "biggest_deviation": "本周最大的摩擦点在于高强度工作日与周末之间的作息节奏切换，周末初期容易出现断流效应，拉低了全周的平均专注深度。",
                 "next_week_strategy": "下周贯彻「先定桩后填充」原则：周一清晨确立本周不可动摇的 2 个交付硬指标；每晚睡前花 2 分钟做极简记录，避免记录断流。"
             }
+
+    result_dict["source"] = source
 
     # 存入数据库
     full_text = f"【{result_dict.get('title', '复盘报告')}】\n\n" + "\n\n".join([f"【{k}】: {v}" for k, v in result_dict.items() if k not in ["type", "title"]])

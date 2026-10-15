@@ -131,7 +131,7 @@ def create_task(db: Session, user_id: int, task_in: TaskCreate) -> Task:
         done=task_in.done or False
     )
     if task.done:
-        task.done_at = datetime.datetime.utcnow()
+        task.done_at = datetime.datetime.now(datetime.timezone.utc)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -144,7 +144,7 @@ def update_task(db: Session, task_id: int, user_id: int, task_in: TaskUpdate) ->
     data = task_in.model_dump(exclude_unset=True)
     if "done" in data:
         if data["done"] and not task.done:
-            task.done_at = datetime.datetime.utcnow()
+            task.done_at = datetime.datetime.now(datetime.timezone.utc)
         elif not data["done"]:
             task.done_at = None
     for field, value in data.items():

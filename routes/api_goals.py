@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Union
 from database import get_db
-from schemas import GoalOut, GoalCreate, GoalUpdate, GoalBatchCreate, ApplyBreakdownRequest, ApplyBreakdownResponse
+from schemas import GoalOut, GoalCreate, GoalUpdate, GoalBatchCreate, ApplyBreakdownRequest, ApplyBreakdownResponse, AIBreakdownRequest
 from services import goal_service
 from config import settings
 
@@ -53,10 +53,14 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     return {"message": "目标删除成功"}
 
 @router.post("/ai-breakdown")
-def ai_breakdown_goal(req: dict, db: Session = Depends(get_db)):
+def ai_breakdown_goal(req: Union[AIBreakdownRequest, dict], db: Session = Depends(get_db)):
     import ai_agent
-    title = req.get("goal_title") or "未命名目标"
-    desc = req.get("goal_description")
+    if isinstance(req, AIBreakdownRequest):
+        title = req.goal_title or "未命名目标"
+        desc = req.goal_description
+    else:
+        title = req.get("goal_title") or "未命名目标"
+        desc = req.get("goal_description")
     return ai_agent.breakdown_goal(db, user_id=settings.DEFAULT_USER_ID, goal_title=title, goal_desc=desc)
 
 @router.post("/ai-breakdown/apply", response_model=ApplyBreakdownResponse)

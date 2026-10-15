@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import date as dt_date, datetime as dt_datetime
 
@@ -22,9 +22,7 @@ class ProfileOut(ProfileBase):
     id: int
     user_id: int
     updated_at: Optional[dt_datetime] = None
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Skill Schemas ---
@@ -46,9 +44,7 @@ class SkillUpdate(BaseModel):
 class SkillOut(SkillBase):
     id: int
     user_id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Goal Schemas ---
@@ -87,9 +83,7 @@ class GoalOut(GoalBase):
     id: int
     user_id: int
     children: List['GoalOut'] = []
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 GoalOut.model_rebuild()
 
@@ -116,9 +110,7 @@ class TaskOut(TaskBase):
     id: int
     user_id: int
     done_at: Optional[dt_datetime] = None
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- DailyLog Schemas ---
@@ -145,9 +137,7 @@ class DailyLogUpdate(DailyLogBase):
 class DailyLogOut(DailyLogBase):
     id: int
     user_id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- AI Schemas ---
@@ -168,10 +158,9 @@ class AIMessageOut(BaseModel):
     mode: str
     question: Optional[str] = None
     answer: str
+    source: Optional[str] = "ai_model"
     created_at: dt_datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- AI Breakdown Apply Schemas ---

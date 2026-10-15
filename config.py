@@ -1,10 +1,12 @@
 import os
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
     APP_HOST: str = os.getenv("APP_HOST", "127.0.0.1")
     APP_PORT: int = int(os.getenv("APP_PORT", "8000"))
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
@@ -17,9 +19,5 @@ class Settings(BaseSettings):
     AI_MOCK_FALLBACK: bool = os.getenv("AI_MOCK_FALLBACK", "True").lower() in ("true", "1", "yes")
 
     DEFAULT_USER_ID: int = 1
-
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
 
 settings = Settings()

@@ -17,23 +17,16 @@ def get_or_create_profile(db: Session, user_id: int = 1) -> Profile:
     if not profile:
         profile = Profile(
             user_id=user_id,
-            age=28,
+            age=None,
             gender="保密",
-            occupation="软件工程师",
-            industry="人工智能/互联网",
-            years_of_work=4,
-            education="本科",
-            major="计算机科学与技术",
-            health_info={
-                "height": 175,
-                "weight": 70,
-                "sleep_habit": "23:30睡, 07:30起",
-                "diet_pref": "清淡少油, 蛋白质优先",
-                "taboo": "无",
-                "allergy_or_disease": "轻度花粉过敏, 长期伏案偶有颈椎酸痛"
-            },
-            vision="在未来3-5年内成为全栈智能体领域的顶尖实践者，兼顾健康强健的体魄与自律从容的生活方式。",
-            constraints="每天工作外有3小时可用学习与运动时间；重视长期复利，拒绝高透支低收益的事情。"
+            occupation="",
+            industry="",
+            years_of_work=0,
+            education="",
+            major="",
+            health_info={},
+            vision="",
+            constraints=""
         )
         db.add(profile)
         db.commit()

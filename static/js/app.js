@@ -1,5 +1,16 @@
 // 全局客户端交互模块
 window.LifePlanner = {
+    // 字符转义防止 XSS 注入 (P1-5 修复)
+    escapeHtml: function(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    },
+
     // 浮动通知 Toast
     toast: function(message, type = 'success') {
         let container = document.getElementById('toast-container');
@@ -19,10 +30,11 @@ window.LifePlanner = {
         const iconColor = isSuccess ? 'text-[#00F5A0]' : (isError ? 'text-[#FF4D5E]' : 'text-[#F59E0B]');
         const icon = isSuccess ? '✓' : (isError ? '✕' : '⚠');
 
+        const safeMessage = this.escapeHtml(message);
         toastEl.className = `pointer-events-auto transform transition-all duration-300 ease-out translate-y-[-10px] opacity-0 flex items-center gap-3 p-4 bg-[#12161c]/95 backdrop-blur-md border ${borderColor} rounded-xl shadow-2xl text-white text-sm`;
         toastEl.innerHTML = `
             <div class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-white/5 font-bold ${iconColor}">${icon}</div>
-            <div class="flex-1 font-medium">${message}</div>
+            <div class="flex-1 font-medium">${safeMessage}</div>
         `;
 
         container.appendChild(toastEl);
@@ -59,6 +71,8 @@ window.LifePlanner = {
         }
     }
 };
+
+window.escapeHtml = window.LifePlanner.escapeHtml;
 
 // 注册 PWA Service Worker (离线与安装支持)
 if ('serviceWorker' in navigator) {

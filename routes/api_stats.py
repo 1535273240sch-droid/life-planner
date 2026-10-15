@@ -55,9 +55,9 @@ def get_stats_trends(
             energy_data.append(log.energy)
         else:
             study_data.append(0)
-            sleep_data.append(0)
-            mood_data.append(0)
-            energy_data.append(0)
+            sleep_data.append(None)
+            mood_data.append(None)
+            energy_data.append(None)
 
         curr += datetime.timedelta(days=1)
 

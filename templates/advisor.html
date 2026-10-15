@@ -59,6 +59,7 @@
 
     <!-- 研判结果展示区 (6 段式结构化卡片) -->
     <div id="result-container" class="hidden space-y-4">
+        <div id="res-source-banner"></div>
         <div class="glass-panel p-6 space-y-5 border-emerald-500/40 shadow-[0_0_30px_rgba(0,245,160,0.1)]">
             <div class="flex items-center justify-between border-b border-white/10 pb-4">
                 <div class="flex items-center gap-3">
@@ -163,10 +164,43 @@
         const container = document.getElementById('result-container');
         container.classList.remove('hidden');
 
+        const bannerEl = document.getElementById('res-source-banner');
+        if (data.is_crisis || data.source === 'crisis_safety_guard') {
+            bannerEl.innerHTML = `
+                <div class="p-4 bg-red-950/80 border border-red-500/70 rounded-2xl text-red-100 text-xs space-y-2.5 shadow-lg shadow-red-950/50">
+                    <div class="font-bold flex items-center gap-2 text-red-400 text-sm">
+                        <span class="text-base">🆘</span>
+                        <span>生命关怀与心理援助防线已启动</span>
+                    </div>
+                    <p class="leading-relaxed">检测到可能危及人身安全的表述。请立即停止自我加压，给自己一个安全温暖的保护空间。活着才有一切希望，没有任何一项目标值得以生命与健康为代价。请立即拨打以下 24 小时全国免费心理援助热线：</p>
+                    <div class="bg-black/50 p-3 rounded-xl font-mono text-xs space-y-1.5 border border-white/5">
+                        <div class="flex items-center justify-between"><span>• 全国希望生命救助热线:</span> <a href="tel:4001619995" class="text-[#00F5A0] font-bold underline">400-161-9995</a></div>
+                        <div class="flex items-center justify-between"><span>• 北京心理危机研究与干预中心:</span> <a href="tel:01082951332" class="text-[#00F5A0] font-bold underline">010-82951332</a></div>
+                        <div class="flex items-center justify-between"><span>• 共青团青少年心理咨询热线:</span> <a href="tel:12355" class="text-[#00F5A0] font-bold underline">12355</a></div>
+                        <div class="flex items-center justify-between"><span>• 紧急危险请立即拨打:</span> <span class="text-red-400 font-bold">110 / 120</span></div>
+                    </div>
+                </div>
+            `;
+        } else if (data.source === 'offline_mock') {
+            bannerEl.innerHTML = `
+                <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
+                    <span class="text-base">⚠️</span>
+                    <span><b>本地规则演示模式</b>：系统未配置云端大模型 API 密钥，以下为根据个人档案与近7天记录启发式生成的参考内容。</span>
+                </div>
+            `;
+        } else {
+            bannerEl.innerHTML = `
+                <div class="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+                    <span class="text-base">✨</span>
+                    <span><b>云端大模型深度研判</b>：已深度结合你的真实档案、健康底座与近7天生活记录。</span>
+                </div>
+            `;
+        }
+
         const badgeEl = document.getElementById('res-conclusion');
         const c = data.conclusion || '建议做';
         badgeEl.innerText = c;
-        if (c.includes('不建议')) {
+        if (c.includes('不建议') || c.includes('必须停止')) {
             badgeEl.className = 'text-sm font-black px-3.5 py-1 rounded-full font-mono bg-red-900/60 text-red-300 border border-red-500/40';
         } else if (c.includes('条件')) {
             badgeEl.className = 'text-sm font-black px-3.5 py-1 rounded-full font-mono bg-amber-900/60 text-amber-300 border border-amber-500/40';
@@ -199,12 +233,12 @@
                 <div class="glass-panel p-4 space-y-2.5 border-white/5">
                     <div class="flex items-center justify-between text-xs">
                         <span class="font-bold text-white flex items-center gap-1.5">
-                            <span class="text-[#00F5A0]">Q:</span> ${m.question || '咨询问题'}
+                            <span class="text-[#00F5A0]">Q:</span> ${LifePlanner.escapeHtml(m.question || '咨询问题')}
                         </span>
                         <span class="text-[11px] text-slate-500 font-mono">${new Date(m.created_at).toLocaleString('zh-CN')}</span>
                     </div>
                     <div class="text-xs text-slate-300 whitespace-pre-wrap bg-white/5 p-3 rounded-lg leading-relaxed max-h-48 overflow-y-auto">
-                        ${m.answer}
+                        ${LifePlanner.escapeHtml(m.answer)}
                     </div>
                 </div>
             `).join('');

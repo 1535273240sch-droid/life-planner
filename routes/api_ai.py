@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
-from schemas import AIAskRequest, AIBreakdownRequest, AIMessageOut
+from schemas import AIAskRequest, AIBreakdownRequest, AIMessageOut, AIReviewRequest
 from models import AiMessage
 import ai_agent
 from config import settings
@@ -41,11 +41,11 @@ def get_ai_history(
     return query.order_by(AiMessage.id.desc()).limit(limit).all()
 
 @router.post("/review")
-def trigger_ai_review(req: Optional[dict] = None, db: Session = Depends(get_db)):
+def trigger_ai_review(req: Optional[AIReviewRequest] = None, db: Session = Depends(get_db)):
     """D3. 触发每日/每周复盘"""
-    req = req or {}
-    r_type = req.get("type", "daily")
-    target_date = req.get("date")
+    req_data = req or AIReviewRequest()
+    r_type = req_data.type or "daily"
+    target_date = req_data.date
     return ai_agent.generate_review(db, user_id=settings.DEFAULT_USER_ID, review_type=r_type, target_date_str=target_date)
 
 @router.get("/gaps")

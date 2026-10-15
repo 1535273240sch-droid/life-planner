@@ -1,16 +1,17 @@
+import re
 import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from models import DailyLog, Goal, Task, Profile
 from services import profile_service, goal_service, log_service
 
-def parse_sleep_hours(start_str: str, end_str: str) -> float:
-    """计算睡眠时长（小时），跨天按夜间处理"""
-    if not start_str or not end_str or ":" not in start_str or ":" not in end_str:
-        return 7.5
+def parse_sleep_hours(start_str: Optional[str], end_str: Optional[str]) -> Optional[float]:
+    """计算睡眠时长（小时），跨天按夜间处理。若未记录或格式不符返回 None"""
+    if not start_str or not end_str or ":" not in str(start_str) or ":" not in str(end_str):
+        return None
     try:
-        sh, sm = map(int, start_str.strip().split(":")[:2])
-        eh, em = map(int, end_str.strip().split(":")[:2])
+        sh, sm = map(int, str(start_str).strip().split(":")[:2])
+        eh, em = map(int, str(end_str).strip().split(":")[:2])
         start_min = sh * 60 + sm
         end_min = eh * 60 + em
         if end_min < start_min: # 跨天
@@ -19,7 +20,7 @@ def parse_sleep_hours(start_str: str, end_str: str) -> float:
             total_min = end_min - start_min
         return round(total_min / 60.0, 1)
     except Exception:
-        return 7.5
+        return None
 
 def detect_life_gaps(db: Session, user_id: int = 1) -> List[Dict[str, Any]]:
     """
@@ -40,23 +41,39 @@ def detect_life_gaps(db: Session, user_id: int = 1) -> List[Dict[str, Any]]:
         })
         return gaps
 
-    # 1. 睡眠缺口检测 (连续睡眠不足 或 平均睡眠短缺)
-    sleep_hours_list = []
+    # 1. 睡眠缺口检测 (连续未记录睡眠 或 真实睡眠不足)
+    valid_sleep_hours = []
     short_sleep_days = 0
+    missing_sleep_days = 0
+
     for l in recent_logs[:7]:
         hrs = parse_sleep_hours(l.sleep_start, l.sleep_end)
-        sleep_hours_list.append(hrs)
-        if hrs < 6.5:
-            short_sleep_days += 1
+        if hrs is None:
+            missing_sleep_days += 1
+        else:
+            valid_sleep_hours.append(hrs)
+            if hrs < 6.5:
+                short_sleep_days += 1
 
-    if short_sleep_days >= 3 or (sleep_hours_list and sum(sleep_hours_list)/len(sleep_hours_list) < 6.8):
-        avg_s = round(sum(sleep_hours_list)/len(sleep_hours_list), 1) if sleep_hours_list else 6.0
+    # 1a. 连续多天未记录睡眠缺口预警 (P0-3 修复)
+    if len(recent_logs[:7]) >= 3 and missing_sleep_days >= 3:
         gaps.append({
             "category": "睡眠与体能",
-            "level": "预警",
-            "title": f"发现持续性睡眠负债 (近7天有{short_sleep_days}天睡眠不足)",
-            "detail": f"你近7天的平均睡眠仅为 {avg_s} 小时。连续欠觉会导致前额叶皮层认知功能下降15-20%，容易产生代偿性吃糖与注意力涣散。建议今明两晚提早45分钟放下手机就寝。"
+            "level": "提醒",
+            "title": f"连续多天未记录作息睡眠 (近7天有{missing_sleep_days}天缺省)",
+            "detail": "作息规律是高维认知与体能恢复的基石。当前缺失真实入睡与起床时间，系统无法准确评估你的疲劳程度与能量消耗。建议睡前或晨起顺手记录入睡和醒来时间。"
         })
+
+    # 1b. 真实睡眠不足 (基于有记录的天数)
+    if valid_sleep_hours:
+        avg_s = round(sum(valid_sleep_hours) / len(valid_sleep_hours), 1)
+        if short_sleep_days >= 3 or avg_s < 6.8:
+            gaps.append({
+                "category": "睡眠与体能",
+                "level": "预警",
+                "title": f"发现持续性睡眠负债 (近7天有{short_sleep_days}天睡眠不足)",
+                "detail": f"在你记录睡眠的天数中，平均睡眠仅为 {avg_s} 小时（{short_sleep_days}天低于6.5小时）。连续欠觉会导致前额叶皮层认知功能下降15-20%，容易产生代偿性吃糖与注意力涣散。建议今明两晚提早45分钟放下手机就寝。"
+            })
 
     # 2. 营养与饮食缺口检测 (蔬菜/高蛋白)
     veg_keywords = ["菜", "沙拉", "西兰花", "番茄", "黄瓜", "蔬菜", "青菜", "菠菜"]
@@ -87,12 +104,36 @@ def detect_life_gaps(db: Session, user_id: int = 1) -> List[Dict[str, Any]]:
             "detail": "近几天饮食多为碳水主食，优质蛋白质摄入频次明显不足。足量蛋白质是维持肌肉量、基础代谢及日间专注度的重要基石，建议早餐增加鸡蛋牛奶，正餐保证手掌大小的瘦肉/豆制品。"
         })
 
-    # 3. 目标投入断流检测 (目标冷落)
+    # 3. 目标投入断流检测 (基于任务完成情况与核心关键词语义匹配，P0-4 修复)
     for g in ongoing_goals:
-        # 检查近7天有没有做过关于该目标的 tasks 或在 done_items 里提及
+        # 3a. 提取目标核心关键词（去除攻坚、核心里程碑拆解、阶段、书名号等干扰）
+        core_keywords = []
+        raw_title = (g.title or "").strip()
+        bracket_matches = re.findall(r"「(.*?)」|『(.*?)』|【(.*?)】", raw_title)
+        for m in bracket_matches:
+            for item in m:
+                if item and len(item) >= 2:
+                    core_keywords.append(item)
+                    # 剥离数字分值、级别等后缀（例如「雅思7分」->「雅思」，「托福105」->「托福」）
+                    stem = re.sub(r"(\d+分|\d+级|\d+|核心|突破|进阶|精通)$", "", item).strip()
+                    if len(stem) >= 2 and stem not in core_keywords:
+                        core_keywords.append(stem)
+
+        cleaned_title = re.sub(r"^(攻坚|推进|执行|完成|拆解|阶段[一二三四五六七八九十\d]+[：:]|学习)", "", raw_title)
+        cleaned_title = re.sub(r"(核心里程碑拆解与执行|里程碑|计划|行动|原著精读)$", "", cleaned_title).strip()
+        cleaned_title = re.sub(r"[「」『』【】]", "", cleaned_title).strip()
+        if len(cleaned_title) >= 2 and cleaned_title not in core_keywords:
+            core_keywords.append(cleaned_title)
+            stem_clean = re.sub(r"(\d+分|\d+级|\d+)$", "", cleaned_title).strip()
+            if len(stem_clean) >= 2 and stem_clean not in core_keywords:
+                core_keywords.append(stem_clean)
+        if raw_title and raw_title not in core_keywords:
+            core_keywords.append(raw_title)
+
         goal_done_count = 0
         for l in recent_logs[:7]:
-            if g.title in (l.done_items or "") or g.title in (l.study_note or ""):
+            text_corpus = f"{l.done_items or ''} {l.study_note or ''} {l.reflection or ''}"
+            if any(kw in text_corpus for kw in core_keywords if len(kw) >= 2):
                 goal_done_count += 1
 
         recent_tasks = db.query(Task).filter(

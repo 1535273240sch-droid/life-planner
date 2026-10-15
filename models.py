@@ -1,16 +1,19 @@
 import datetime
 from sqlalchemy import (
-    Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, JSON
+    Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, JSON, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from database import Base
+
+def utc_now():
+    return datetime.datetime.now(datetime.timezone.utc)
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
     nickname = Column(String(50), default="探索者")
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # 关联
     profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -39,7 +42,7 @@ class Profile(Base):
     
     vision = Column(Text, nullable=True)          # 人生愿景: 我未来想成为什么样的人
     constraints = Column(Text, nullable=True)     # 价值观与限制: 每天可用时间、经济状况、不愿意做的事
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     user = relationship("User", back_populates="profile")
 
@@ -77,7 +80,7 @@ class Goal(Base):
 
     user = relationship("User", back_populates="goals")
     parent = relationship("Goal", remote_side=[id], backref="children")
-    tasks = relationship("Task", back_populates="goal", cascade="all, delete-orphan")
+    tasks = relationship("Task", back_populates="goal")
 
 
 class Task(Base):
@@ -98,6 +101,9 @@ class Task(Base):
 
 class DailyLog(Base):
     __tablename__ = "daily_logs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", name="uix_user_daily_log"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
@@ -130,6 +136,7 @@ class AiMessage(Base):
     mode = Column(String(30), nullable=False)
     question = Column(Text, nullable=True)
     answer = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    source = Column(String(50), default="ai_model") # ai_model / offline_mock / crisis_safety_guard
+    created_at = Column(DateTime, default=utc_now)
 
     user = relationship("User", back_populates="ai_messages")
