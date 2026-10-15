@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>{% block title %}人生智能编排体 (Life Planner AI){% endblock %}</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#000000',
+                        cardbg: 'rgba(18, 22, 28, 0.75)',
+                        neongreen: '#00F5A0',
+                        neonred: '#FF4D5E',
+                        subtlegrey: '#CBD5E1',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PWA & Mobile Web App Meta -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="人生编排">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="/static/icons/favicon.png">
+    <link rel="stylesheet" href="/static/css/style.css">
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-[#03060a] text-slate-100 min-h-screen antialiased selection:bg-[#00F5A0] selection:text-black flex justify-center items-start">
+
+    <!-- 手机原生 App 视口容器 (手机全屏贴合，电脑打开时居中沉浸式 iPhone 机身) -->
+    <div class="phone-shell w-full max-w-md min-h-screen bg-black flex flex-col relative">
+
+        <!-- 移动端原生 App 顶部导航条 -->
+        <header class="sticky top-0 z-40 w-full border-b border-white/10 bg-black/85 backdrop-blur-xl">
+            <div class="w-full px-4 h-14 flex items-center justify-between">
+                <a href="/" class="flex items-center gap-2.5 active:opacity-80 transition-opacity">
+                    <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#00F5A0] to-emerald-700 flex items-center justify-center font-black text-black text-sm shadow-[0_0_12px_rgba(0,245,160,0.4)]">
+                        Ω
+                    </div>
+                    <div>
+                        <div class="font-extrabold text-sm tracking-wide text-white flex items-center gap-1.5 leading-none">
+                            <span>人生智能编排体</span>
+                            <span class="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-emerald-400 font-mono">App</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400 mt-1 leading-none">个人专属智能决策编排</div>
+                    </div>
+                </a>
+
+                <!-- 顶部右侧快捷入口 -->
+                <div class="flex items-center gap-1.5">
+                    {% if active_page == 'review' %}
+                    <a href="/profile" class="text-xs px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white flex items-center gap-1 active:scale-95 transition-transform">
+                        <span>档案</span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </a>
+                    {% elif active_page == 'profile' %}
+                    <a href="/review" class="text-xs px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white flex items-center gap-1 active:scale-95 transition-transform">
+                        <span>复盘</span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </a>
+                    {% else %}
+                    <a href="/profile" class="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-transform" title="个人档案">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </header>
+
+        <!-- 主体内容区域 (针对手机端安全边距优化) -->
+        <main class="flex-1 w-full px-4 py-4 mobile-bottom-pad">
+            {% block content %}{% endblock %}
+        </main>
+
+        <!-- 移动端原生 App 底部 Dock 导航栏 (TabBar) -->
+        <nav class="fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-2xl border-t border-white/10 px-2 pt-1 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))]">
+            <div class="max-w-md mx-auto grid grid-cols-5 gap-1 text-center items-end">
+                <!-- 1. 总览 -->
+                <a href="/" class="flex flex-col items-center justify-center min-h-[48px] py-1 rounded-xl transition-all active:scale-95 {% if active_page == 'index' %}text-[#00F5A0] font-bold{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                    <span class="text-[10px] mt-0.5 tracking-tight">总览</span>
+                </a>
+
+                <!-- 2. 目标 -->
+                <a href="/goals" class="flex flex-col items-center justify-center min-h-[48px] py-1 rounded-xl transition-all active:scale-95 {% if active_page == 'goals' %}text-[#00F5A0] font-bold{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    <span class="text-[10px] mt-0.5 tracking-tight">目标</span>
+                </a>
+
+                <!-- 3. [+] 记生活 (居中突出原生 FAB 风格) -->
+                <a href="/log" class="flex flex-col items-center justify-center py-1 transition-all group active:scale-90">
+                    <div class="w-11 h-11 -mt-5 rounded-full bg-gradient-to-tr from-[#00F5A0] to-[#00D284] text-black flex items-center justify-center font-bold text-xl shadow-[0_0_18px_rgba(0,245,160,0.55)] border-2 border-black group-hover:scale-105 transition-transform">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                    </div>
+                    <span class="text-[10px] mt-0.5 tracking-tight {% if active_page == 'log' %}text-[#00F5A0] font-bold{% else %}text-slate-300{% endif %}">记生活</span>
+                </a>
+
+                <!-- 4. AI顾问 -->
+                <a href="/advisor" class="flex flex-col items-center justify-center min-h-[48px] py-1 rounded-xl transition-all active:scale-95 {% if active_page == 'advisor' %}text-[#00F5A0] font-bold{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                    <span class="text-[10px] mt-0.5 tracking-tight">AI顾问</span>
+                </a>
+
+                <!-- 5. 档案复盘 -->
+                <a href="/review" class="flex flex-col items-center justify-center min-h-[48px] py-1 rounded-xl transition-all active:scale-95 {% if active_page in ['review', 'profile'] %}text-[#00F5A0] font-bold{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    <span class="text-[10px] mt-0.5 tracking-tight">复盘档案</span>
+                </a>
+            </div>
+        </nav>
+
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

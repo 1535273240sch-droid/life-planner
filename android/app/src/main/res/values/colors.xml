@@ -1,0 +1,7 @@
+<resources>
+    <color name="black">#000000</color>
+    <color name="dark_surface">#12161C</color>
+    <color name="neon_green">#00F5A0</color>
+    <color name="white">#FFFFFF</color>
+    <color name="status_bar_color">#000000</color>
+</resources>

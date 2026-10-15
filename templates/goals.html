@@ -1,0 +1,529 @@
+{% extends "base.html" %}
+
+{% block title %}目标系统与分层管理 - 人生智能编排体{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-6xl mx-auto">
+    <!-- 顶部操作栏 -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-white/10">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                <span>目标分层架构树</span>
+                <span class="badge-blue text-xs px-2.5 py-0.5 rounded-full font-mono">Vision ➔ Tasks</span>
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">愿景（方向） ➔ 长期目标（1-5年） ➔ 阶段里程碑（1-3个月） ➔ 周目标 ➔ 每日任务</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="openBreakdownModal()" class="btn-secondary px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border-emerald-500/40 text-emerald-400 hover:text-white">
+                <svg class="w-4 h-4 text-[#00F5A0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                <span>AI 辅助拆解目标</span>
+            </button>
+            <button onclick="openGoalModal()" class="btn-neon px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                <span>新建目标</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 过滤器选项 -->
+    <div class="flex flex-wrap items-center justify-between gap-3 p-3 glass-panel text-xs">
+        <div class="flex items-center gap-2">
+            <span class="text-slate-400">状态过滤:</span>
+            <button onclick="filterStatus('')" class="status-btn px-2.5 py-1 rounded-lg bg-white/10 text-white font-medium" data-status="">全部</button>
+            <button onclick="filterStatus('in_progress')" class="status-btn px-2.5 py-1 rounded-lg text-slate-400 hover:text-white" data-status="in_progress">进行中</button>
+            <button onclick="filterStatus('completed')" class="status-btn px-2.5 py-1 rounded-lg text-slate-400 hover:text-white" data-status="completed">已完成</button>
+            <button onclick="filterStatus('paused')" class="status-btn px-2.5 py-1 rounded-lg text-slate-400 hover:text-white" data-status="paused">暂停</button>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-slate-400">层级显示:</span>
+            <select id="level-filter" onchange="loadGoals()" class="px-2.5 py-1 text-xs">
+                <option value="">全部层级</option>
+                <option value="vision">人生愿景 (Vision)</option>
+                <option value="long">长期目标 (1-5年)</option>
+                <option value="stage">阶段目标 (1-3月)</option>
+                <option value="weekly">周目标 (Weekly)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- 目标列表容器 -->
+    <div id="goals-tree-container" class="space-y-4">
+        <div class="py-12 text-center text-xs text-slate-500">正在加载目标树...</div>
+    </div>
+</div>
+
+<!-- 新建/编辑目标模态框 (移动端底部抽屉) -->
+<div id="goal-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="glass-panel w-full max-w-md rounded-t-3xl sm:rounded-2xl p-5 space-y-4 border-emerald-500/30 max-h-[88vh] overflow-y-auto">
+        <div class="drag-pill sm:hidden" onclick="closeGoalModal()"></div>
+        <h3 id="goal-modal-title" class="text-base font-bold text-white">新建目标</h3>
+        <input type="hidden" id="modal-goal-id">
+
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">目标标题 *</label>
+            <input type="text" id="modal-goal-title" class="w-full px-3 py-2 text-sm" placeholder="例如：掌握大模型Agent架构落地与全栈开发">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">目标层级</label>
+                <select id="modal-goal-level" class="w-full px-3 py-2 text-sm" onchange="updateParentSelectOptions()">
+                    <option value="long">长期目标 (1-5年)</option>
+                    <option value="stage">阶段目标 (1-3个月)</option>
+                    <option value="weekly">周目标 (Weekly)</option>
+                    <option value="vision">人生愿景 (Vision)</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">分类</label>
+                <select id="modal-goal-category" class="w-full px-3 py-2 text-sm">
+                    <option value="职业">职业</option>
+                    <option value="学习">学习</option>
+                    <option value="语言">语言</option>
+                    <option value="健康">健康</option>
+                    <option value="财务">财务</option>
+                    <option value="其他">其他</option>
+                </select>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">父级归属目标 (实现层层拆解)</label>
+            <select id="modal-goal-parent" class="w-full px-3 py-2 text-sm">
+                <option value="">(作为独立/顶层目标)</option>
+            </select>
+        </div>
+
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">衡量标准 (Metric，如：雅思7分 / 体重降到70kg)</label>
+            <input type="text" id="modal-goal-metric" class="w-full px-3 py-2 text-sm" placeholder="客观、可衡量的检验标准">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">开始日期</label>
+                <input type="date" id="modal-goal-start" class="w-full px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">截止日期</label>
+                <input type="date" id="modal-goal-due" class="w-full px-3 py-2 text-sm">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">目标详细说明与行动准则</label>
+            <textarea id="modal-goal-desc" rows="3" class="w-full px-3 py-2 text-sm" placeholder="阐述为什么要做、关键成果路径是什么..."></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">当前进度: <span id="goal-progress-val" class="text-[#00F5A0] font-bold">0%</span></label>
+                <input type="range" id="modal-goal-progress" min="0" max="100" value="0" class="w-full accent-[#00F5A0]" oninput="document.getElementById('goal-progress-val').innerText = this.value + '%'">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">状态</label>
+                <select id="modal-goal-status" class="w-full px-3 py-2 text-sm">
+                    <option value="in_progress">进行中 (In Progress)</option>
+                    <option value="completed">已完成 (Completed)</option>
+                    <option value="paused">暂停 (Paused)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-white/10">
+            <button onclick="closeGoalModal()" class="btn-secondary px-4 py-2 rounded-lg text-xs">取消</button>
+            <button onclick="submitGoal()" class="btn-neon px-4 py-2 rounded-lg text-xs font-semibold">保存目标</button>
+        </div>
+    </div>
+</div>
+
+<!-- AI 目标拆解模态弹窗 (移动端抽屉 / 桌面端居中弹窗) -->
+<div id="breakdown-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="glass-panel w-full max-w-2xl rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 space-y-4 border-emerald-500/30 max-h-[90vh] overflow-y-auto">
+        <div class="drag-pill sm:hidden" onclick="closeBreakdownModal()"></div>
+        <div class="flex items-center justify-between pb-3 border-b border-white/10">
+            <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded bg-[#00F5A0] text-black flex items-center justify-center font-bold text-xs">AI</div>
+                <h3 class="text-base font-bold text-white">AI 智能目标拆解工坊</h3>
+            </div>
+            <button onclick="closeBreakdownModal()" class="text-slate-400 hover:text-white text-sm">✕</button>
+        </div>
+
+        <div class="text-xs text-slate-300 bg-white/5 p-3 rounded-lg border border-white/5">
+            输入您的长期或宏观目标，AI 将结合您的档案背景、可用时间与技能现状，自动将其拆解为阶段里程碑与具体可执行的周攻坚计划，并可一键批量落库绑定。
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">归属已有宏观目标 (可选)</label>
+                <select id="ai-breakdown-parent" class="w-full px-3 py-2 text-sm" onchange="onBreakdownParentChange()">
+                    <option value="">(创建为新的独立宏观长远目标)</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">目标分类</label>
+                <select id="ai-breakdown-category" class="w-full px-3 py-2 text-sm">
+                    <option value="职业">职业</option>
+                    <option value="学习">学习</option>
+                    <option value="语言">语言</option>
+                    <option value="健康">健康</option>
+                    <option value="财务">财务</option>
+                    <option value="其他">其他</option>
+                </select>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">目标主题 *</label>
+            <input type="text" id="ai-breakdown-title" class="w-full px-3 py-2 text-sm" placeholder="例如：在3个月内通过雅思考试并取得口语7分">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">补充背景或诉求 (可选)</label>
+            <textarea id="ai-breakdown-desc" rows="2" class="w-full px-3 py-2 text-sm" placeholder="例如：平时工作较忙，周末每天能拿出3小时，目前听读尚可，口语词汇较弱..."></textarea>
+        </div>
+
+        <button id="ai-breakdown-btn" onclick="executeAIBreakdown()" class="btn-neon w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <span id="ai-breakdown-btn-text">开始智能拆解</span>
+        </button>
+
+        <div id="ai-breakdown-result" class="hidden space-y-4 pt-3 border-t border-white/10">
+            <div class="flex items-center justify-between">
+                <div class="text-xs font-semibold text-emerald-400 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>拆解目标分层清单预览</span>
+                </div>
+                <div id="ai-breakdown-stats" class="text-[11px] font-mono text-slate-400"></div>
+            </div>
+
+            <!-- 结构化阶段目标与周任务卡片容器 -->
+            <div id="ai-breakdown-stages-container" class="space-y-3 max-h-72 overflow-y-auto pr-1"></div>
+
+            <!-- Markdown 策略蓝图折叠 -->
+            <details class="group bg-white/5 rounded-xl border border-white/10 overflow-hidden text-xs">
+                <summary class="px-4 py-2.5 font-medium text-slate-300 cursor-pointer flex items-center justify-between hover:bg-white/5 transition-colors">
+                    <span class="flex items-center gap-1.5">
+                        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        <span>查看 AI 拆解完整策略蓝图 (Markdown)</span>
+                    </span>
+                    <span class="text-slate-500 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div id="ai-breakdown-content" class="p-4 bg-black/60 text-slate-200 border-t border-white/5 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto font-mono text-[11px]"></div>
+            </details>
+
+            <button id="ai-apply-btn" onclick="applyBreakdownPlan()" class="btn-neon w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,245,160,0.3)]">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <span id="ai-apply-btn-text">采纳并自动生成目标清单</span>
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentStatusFilter = '';
+    let cachedGoals = [];
+
+    const levelBadges = {
+        vision: { label: '人生愿景', class: 'badge-gold' },
+        long: { label: '长期目标', class: 'badge-blue' },
+        stage: { label: '阶段目标', class: 'badge-green' },
+        weekly: { label: '周目标', class: 'bg-purple-900/40 text-purple-300 border border-purple-500/30' }
+    };
+
+    async function loadGoals() {
+        const level = document.getElementById('level-filter').value;
+        let url = '/api/goals?';
+        if (currentStatusFilter) url += `status=${currentStatusFilter}&`;
+        if (level) url += `level=${level}&`;
+
+        try {
+            const goals = await LifePlanner.request(url);
+            cachedGoals = goals;
+            renderGoals(goals);
+            updateParentSelectOptions();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function renderGoals(goals) {
+        const container = document.getElementById('goals-tree-container');
+        if (!goals || goals.length === 0) {
+            container.innerHTML = '<div class="py-12 text-center text-xs text-slate-500 glass-panel">暂无目标，点击右上角"新建目标"或"AI辅助拆解"开始规划。</div>';
+            return;
+        }
+
+        container.innerHTML = goals.map(g => {
+            const badge = levelBadges[g.level] || { label: g.level, class: 'badge-blue' };
+            const isCompleted = g.status === 'completed';
+            const isPaused = g.status === 'paused';
+            const statusLabel = isCompleted ? '已完成' : (isPaused ? '暂停' : '进行中');
+            const statusColor = isCompleted ? 'text-emerald-400' : (isPaused ? 'text-amber-400' : 'text-blue-400');
+            const parentGoal = g.parent_id ? cachedGoals.find(p => p.id === g.parent_id) : null;
+            const canAIbreakdown = g.level === 'vision' || g.level === 'long';
+            const indentClass = g.level === 'weekly' ? 'sm:ml-8 border-l-2 border-purple-500/40' : (g.level === 'stage' ? 'sm:ml-4 border-l-2 border-emerald-500/40' : '');
+
+            return `
+                <div class="glass-panel p-5 relative group border-white/10 hover:border-white/20 ${indentClass}">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="space-y-1.5 flex-1">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-[11px] px-2 py-0.5 rounded-full font-mono ${badge.class}">${badge.label}</span>
+                                <span class="text-[11px] px-2 py-0.5 rounded bg-white/5 text-slate-400">${g.category || '职业'}</span>
+                                <span class="text-[11px] font-semibold ${statusColor}">${statusLabel}</span>
+                                ${parentGoal ? `<span class="text-[11px] px-2 py-0.5 rounded bg-white/5 text-slate-300 font-mono">↳ 归属: ${parentGoal.title}</span>` : ''}
+                                ${g.due_date ? `<span class="text-[11px] text-slate-400">截止: ${g.due_date}</span>` : ''}
+                            </div>
+                            <h3 class="text-base font-bold text-white">${g.title}</h3>
+                            ${g.description ? `<p class="text-xs text-slate-300 leading-relaxed">${g.description}</p>` : ''}
+                            ${g.metric ? `<div class="text-xs text-[#00F5A0] flex items-center gap-1 font-mono">🎯 检验标准: ${g.metric}</div>` : ''}
+                        </div>
+
+                        <div class="sm:w-56 flex flex-col gap-2 pt-2 sm:pt-0 sm:border-l sm:border-white/10 sm:pl-4">
+                            <div class="flex items-center justify-between text-xs font-mono">
+                                <span class="text-slate-400">完成进度</span>
+                                <span class="text-[#00F5A0] font-bold">${g.progress}%</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div class="bg-gradient-to-r from-emerald-500 to-[#00F5A0] h-full progress-bar-fill rounded-full" style="width: ${g.progress}%"></div>
+                            </div>
+                            <div class="flex items-center justify-end gap-1.5 pt-1">
+                                ${canAIbreakdown ? `<button onclick="openBreakdownModal(${JSON.stringify(g).replace(/"/g, '&quot;')})" class="text-[10px] text-[#00F5A0] hover:text-white px-2 py-1 rounded bg-[#00F5A0]/10 border border-[#00F5A0]/30 font-medium">⚡AI拆解</button>` : ''}
+                                <button onclick="quickUpdateProgress(${g.id}, ${Math.min(100, g.progress + 10)})" class="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300">+10%</button>
+                                <button onclick="editGoal(${JSON.stringify(g).replace(/"/g, '&quot;')})" class="text-xs text-slate-400 hover:text-white px-2 py-1">编辑</button>
+                                <button onclick="deleteGoal(${g.id})" class="text-xs text-slate-400 hover:text-red-400 px-2 py-1">删除</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function filterStatus(status) {
+        currentStatusFilter = status;
+        document.querySelectorAll('.status-btn').forEach(btn => {
+            if (btn.getAttribute('data-status') === status) {
+                btn.className = 'status-btn px-2.5 py-1 rounded-lg bg-white/10 text-white font-medium';
+            } else {
+                btn.className = 'status-btn px-2.5 py-1 rounded-lg text-slate-400 hover:text-white';
+            }
+        });
+        loadGoals();
+    }
+
+    function updateParentSelectOptions() {
+        const select = document.getElementById('modal-goal-parent');
+        const currentGoalId = document.getElementById('modal-goal-id').value;
+        const currentLevel = document.getElementById('modal-goal-level').value;
+
+        select.innerHTML = '<option value="">(无父级 / 顶级目标)</option>';
+        cachedGoals.forEach(g => {
+            if (currentGoalId && g.id == currentGoalId) return;
+            // 简单防循环：只有更高级别的可以作为父级
+            select.innerHTML += `<option value="${g.id}">[${g.level}] ${g.title}</option>`;
+        });
+    }
+
+    function openGoalModal(goal = null) {
+        document.getElementById('goal-modal').classList.remove('hidden');
+        document.getElementById('goal-modal').classList.add('flex');
+        updateParentSelectOptions();
+
+        if (goal) {
+            document.getElementById('goal-modal-title').innerText = '编辑目标';
+            document.getElementById('modal-goal-id').value = goal.id;
+            document.getElementById('modal-goal-title').value = goal.title;
+            document.getElementById('modal-goal-level').value = goal.level || 'long';
+            document.getElementById('modal-goal-category').value = goal.category || '职业';
+            document.getElementById('modal-goal-parent').value = goal.parent_id || '';
+            document.getElementById('modal-goal-metric').value = goal.metric || '';
+            document.getElementById('modal-goal-start').value = goal.start_date || '';
+            document.getElementById('modal-goal-due').value = goal.due_date || '';
+            document.getElementById('modal-goal-desc').value = goal.description || '';
+            document.getElementById('modal-goal-progress').value = goal.progress || 0;
+            document.getElementById('goal-progress-val').innerText = (goal.progress || 0) + '%';
+            document.getElementById('modal-goal-status').value = goal.status || 'in_progress';
+        } else {
+            document.getElementById('goal-modal-title').innerText = '新建目标';
+            document.getElementById('modal-goal-id').value = '';
+            document.getElementById('modal-goal-title').value = '';
+            document.getElementById('modal-goal-level').value = 'long';
+            document.getElementById('modal-goal-category').value = '职业';
+            document.getElementById('modal-goal-parent').value = '';
+            document.getElementById('modal-goal-metric').value = '';
+            document.getElementById('modal-goal-start').value = new Date().toISOString().split('T')[0];
+            document.getElementById('modal-goal-due').value = '';
+            document.getElementById('modal-goal-desc').value = '';
+            document.getElementById('modal-goal-progress').value = 0;
+            document.getElementById('goal-progress-val').innerText = '0%';
+            document.getElementById('modal-goal-status').value = 'in_progress';
+        }
+    }
+
+    function closeGoalModal() {
+        document.getElementById('goal-modal').classList.add('hidden');
+        document.getElementById('goal-modal').classList.remove('flex');
+    }
+
+    function editGoal(g) {
+        openGoalModal(g);
+    }
+
+    async function submitGoal() {
+        const id = document.getElementById('modal-goal-id').value;
+        const title = document.getElementById('modal-goal-title').value.trim();
+        if (!title) {
+            LifePlanner.toast('请输入目标标题', 'warning');
+            return;
+        }
+
+        const payload = {
+            title: title,
+            level: document.getElementById('modal-goal-level').value,
+            category: document.getElementById('modal-goal-category').value,
+            parent_id: parseInt(document.getElementById('modal-goal-parent').value) || null,
+            metric: document.getElementById('modal-goal-metric').value.trim() || null,
+            start_date: document.getElementById('modal-goal-start').value || null,
+            due_date: document.getElementById('modal-goal-due').value || null,
+            description: document.getElementById('modal-goal-desc').value.trim() || null,
+            progress: parseInt(document.getElementById('modal-goal-progress').value) || 0,
+            status: document.getElementById('modal-goal-status').value
+        };
+
+        try {
+            if (id) {
+                await LifePlanner.request(`/api/goals/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload)
+                });
+                LifePlanner.toast('目标已成功更新', 'success');
+            } else {
+                await LifePlanner.request('/api/goals', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                LifePlanner.toast('新目标已创建', 'success');
+            }
+            closeGoalModal();
+            loadGoals();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function quickUpdateProgress(id, newProgress) {
+        try {
+            await LifePlanner.request(`/api/goals/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ progress: newProgress, status: newProgress >= 100 ? 'completed' : 'in_progress' })
+            });
+            loadGoals();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function deleteGoal(id) {
+        if (!confirm('确认删除该目标吗？删除后相关子目标将被解除关联。')) return;
+        try {
+            await LifePlanner.request(`/api/goals/${id}`, { method: 'DELETE' });
+            LifePlanner.toast('目标已删除', 'success');
+            loadGoals();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    // AI 拆解模态窗
+    function openBreakdownModal() {
+        document.getElementById('breakdown-modal').classList.remove('hidden');
+        document.getElementById('breakdown-modal').classList.add('flex');
+    }
+
+    function closeBreakdownModal() {
+        document.getElementById('breakdown-modal').classList.add('hidden');
+        document.getElementById('breakdown-modal').classList.remove('flex');
+    }
+
+    async function executeAIBreakdown() {
+        const title = document.getElementById('ai-breakdown-title').value.trim();
+        if (!title) {
+            LifePlanner.toast('请输入拆解目标主题', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('ai-breakdown-btn');
+        btn.disabled = true;
+        btn.innerText = 'AI 正在深度拆解中...';
+
+        try {
+            const res = await LifePlanner.request('/api/goals/ai-breakdown', {
+                method: 'POST',
+                body: JSON.stringify({
+                    goal_title: title,
+                    goal_description: document.getElementById('ai-breakdown-desc').value.trim()
+                })
+            });
+
+            document.getElementById('ai-breakdown-result').classList.remove('hidden');
+            document.getElementById('ai-breakdown-content').innerText = res.plan || res.breakdown || JSON.stringify(res, null, 2);
+            window._lastBreakdownData = res;
+        } catch (e) {
+            console.error(e);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = '开始智能拆解';
+        }
+    }
+
+    async function applyBreakdownPlan() {
+        const title = document.getElementById('ai-breakdown-title').value.trim() || 'AI拆解目标';
+        const data = window._lastBreakdownData;
+        try {
+            // 1. 创建父目标
+            const parentGoal = await LifePlanner.request('/api/goals', {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: title,
+                    level: 'long',
+                    category: '职业',
+                    metric: '按阶段分步交付达成',
+                    progress: 0,
+                    status: 'in_progress'
+                })
+            });
+
+            // 2. 批量采纳子阶段目标
+            let stages = (data && data.stages) ? data.stages : [
+                { title: `${title} - 阶段一: 基础筑底与摸底`, level: 'stage', category: '职业', metric: '完成基础指标30%', progress: 0 },
+                { title: `${title} - 阶段二: 实战攻坚与突破`, level: 'stage', category: '职业', metric: '核心模块攻坚完成', progress: 0 },
+                { title: `${title} - 阶段三: 集成冲刺与验收`, level: 'stage', category: '职业', metric: '全真验收达标', progress: 0 }
+            ];
+
+            const batchPayload = stages.map(s => ({
+                ...s,
+                parent_id: parentGoal.id
+            }));
+
+            await LifePlanner.request('/api/goals/batch', {
+                method: 'POST',
+                body: JSON.stringify(batchPayload)
+            });
+
+            LifePlanner.toast('已成功采纳并批量生成目标分层树！', 'success');
+            closeBreakdownModal();
+            loadGoals();
+        } catch (e) {
+            console.error(e);
+            LifePlanner.toast('采纳目标失败，请重试', 'error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadGoals();
+    });
+</script>
+{% endblock %}

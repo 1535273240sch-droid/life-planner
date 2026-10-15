@@ -1,0 +1,54 @@
+{
+  "name": "人生智能编排体",
+  "short_name": "人生编排",
+  "description": "个人专属 AI 人生决策编排体，懂你、判断、解释、推动你前进。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["productivity", "lifestyle", "education"],
+  "shortcuts": [
+    {
+      "name": "快速记录生活",
+      "short_name": "记生活",
+      "description": "打开今日打卡与生活数据录入",
+      "url": "/log",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "AI 决策顾问",
+      "short_name": "AI顾问",
+      "description": "向 AI 智能体咨询生活决策建议",
+      "url": "/advisor",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

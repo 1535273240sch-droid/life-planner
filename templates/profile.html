@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block title %}个人档案与技能 - 人生智能编排体{% endblock %}
+
+{% block content %}
+<div class="space-y-8 max-w-5xl mx-auto">
+    <!-- 头部标语 -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-white/10">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                <span>个人档案与能力矩阵</span>
+                <span class="badge-green text-xs px-2.5 py-0.5 rounded-full font-mono">Profile & Matrix</span>
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">这里是 AI 懂你的核心数据底座。真实详尽的录入将让 AI 的决策建议与规划精准有力。</p>
+        </div>
+        <button id="save-profile-btn" onclick="saveProfile()" class="btn-neon px-5 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span>保存全部档案</span>
+        </button>
+    </div>
+
+    <!-- 档案表单网格 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- 基础与职业背景 -->
+        <div class="glass-panel p-6 space-y-4">
+            <div class="flex items-center gap-2 text-[#00F5A0] text-sm font-bold border-b border-white/10 pb-3">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                <span>基础与职场背景</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">年龄</label>
+                    <input type="number" id="p-age" class="w-full px-3 py-2 text-sm" placeholder="如 28">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">性别 (可选)</label>
+                    <select id="p-gender" class="w-full px-3 py-2 text-sm">
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                        <option value="其他">其他</option>
+                        <option value="保密">保密</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">当前职业</label>
+                    <input type="text" id="p-occupation" class="w-full px-3 py-2 text-sm" placeholder="如 软件工程师">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">所在行业</label>
+                    <input type="text" id="p-industry" class="w-full px-3 py-2 text-sm" placeholder="如 互联网/人工智能">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">工作年限 (年)</label>
+                    <input type="number" id="p-years" class="w-full px-3 py-2 text-sm" placeholder="如 5">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">最高学历</label>
+                    <select id="p-education" class="w-full px-3 py-2 text-sm">
+                        <option value="本科">本科</option>
+                        <option value="硕士">硕士</option>
+                        <option value="博士">博士</option>
+                        <option value="大专">大专</option>
+                        <option value="高中及以下">高中及以下</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">毕业专业</label>
+                <input type="text" id="p-major" class="w-full px-3 py-2 text-sm" placeholder="如 计算机科学 / 金融 / 机械工程">
+            </div>
+        </div>
+
+        <!-- 健康与身体状况 (AI建议高敏感约束) -->
+        <div class="glass-panel p-6 space-y-4">
+            <div class="flex items-center gap-2 text-[#38BDF8] text-sm font-bold border-b border-white/10 pb-3">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                <span>健康底座与饮食偏好 (影响饮食与作息判断)</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">身高 (cm)</label>
+                    <input type="number" id="h-height" class="w-full px-3 py-2 text-sm" placeholder="如 175">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">体重 (kg)</label>
+                    <input type="number" id="h-weight" class="w-full px-3 py-2 text-sm" placeholder="如 70">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">典型作息习惯</label>
+                <input type="text" id="h-sleep" class="w-full px-3 py-2 text-sm" placeholder="如 23:30睡, 07:30起, 浅睡眠易醒">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">饮食偏好与戒口</label>
+                <input type="text" id="h-diet" class="w-full px-3 py-2 text-sm" placeholder="如 高蛋白低碳水, 不吃香菜, 戒甜食">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-red-400 mb-1">已知疾病/过敏/身体限制 (AI重点避险)</label>
+                <input type="text" id="h-allergy" class="w-full px-3 py-2 text-sm border-red-500/30" placeholder="如 海鲜过敏, 轻度脂肪肝, 颈椎酸痛">
+            </div>
+        </div>
+    </div>
+
+    <!-- 人生愿景与核心限制 -->
+    <div class="glass-panel p-6 space-y-4">
+        <div class="flex items-center gap-2 text-[#F59E0B] text-sm font-bold border-b border-white/10 pb-3">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <span>人生愿景与核心原则</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">
+                    人生愿景 ("我未来想成为什么样的人")
+                </label>
+                <textarea id="p-vision" rows="4" class="w-full px-3 py-2 text-sm" placeholder="例如：在未来3-5年内成为全栈AI智能体领域的顶尖实践者，拥有健康的体魄与充裕的时间自由..."></textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">
+                    价值观与硬性限制 (每天可用时间、经济状况、不愿意做的事)
+                </label>
+                <textarea id="p-constraints" rows="4" class="w-full px-3 py-2 text-sm" placeholder="例如：每天下班后有2.5小时专注时间；目前拒绝无意义的无效社交；不从事透支身体健康的高风险兼职..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- 技能现状与语言水平 (技能列表增删改) -->
+    <div class="glass-panel p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+            <div class="flex items-center gap-2 text-emerald-400 text-sm font-bold">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+                <span>技能现状与掌握程度</span>
+            </div>
+            <button onclick="openSkillModal()" class="btn-secondary px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 hover:border-emerald-500/50">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                <span>添加技能</span>
+            </button>
+        </div>
+
+        <div id="skills-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="col-span-full py-6 text-center text-xs text-slate-500">正在加载技能库...</div>
+        </div>
+    </div>
+</div>
+
+<!-- 技能添加/编辑模态弹窗 -->
+<div id="skill-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-md p-6 space-y-4 border-emerald-500/30">
+        <h3 id="skill-modal-title" class="text-base font-bold text-white">添加新技能</h3>
+        <input type="hidden" id="modal-skill-id">
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">技能/语言名称</label>
+            <input type="text" id="modal-skill-name" class="w-full px-3 py-2 text-sm" placeholder="如 Python / 英语听说 / 演讲沟通">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">分类</label>
+                <select id="modal-skill-category" class="w-full px-3 py-2 text-sm">
+                    <option value="专业技能">专业技能</option>
+                    <option value="语言水平">语言水平</option>
+                    <option value="软实力">软实力</option>
+                    <option value="健康体能">健康体能</option>
+                    <option value="其他">其他</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">当前水平 (1-10分): <span id="skill-level-val" class="text-[#00F5A0] font-bold">5</span></label>
+                <input type="range" id="modal-skill-level" min="1" max="10" value="5" class="w-full mt-2 accent-[#00F5A0]" oninput="document.getElementById('skill-level-val').innerText = this.value">
+            </div>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">备注说明</label>
+            <input type="text" id="modal-skill-note" class="w-full px-3 py-2 text-sm" placeholder="如 雅思6.0准备冲7 / 独立开发完整后端服务">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+            <button onclick="closeSkillModal()" class="btn-secondary px-4 py-2 rounded-lg text-xs">取消</button>
+            <button onclick="submitSkill()" class="btn-neon px-4 py-2 rounded-lg text-xs font-semibold">保存技能</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function loadProfile() {
+        try {
+            const data = await LifePlanner.request('/api/profile');
+            document.getElementById('p-age').value = data.age || '';
+            document.getElementById('p-gender').value = data.gender || '保密';
+            document.getElementById('p-occupation').value = data.occupation || '';
+            document.getElementById('p-industry').value = data.industry || '';
+            document.getElementById('p-years').value = data.years_of_work || '';
+            document.getElementById('p-education').value = data.education || '本科';
+            document.getElementById('p-major').value = data.major || '';
+
+            const health = data.health_info || {};
+            document.getElementById('h-height').value = health.height || '';
+            document.getElementById('h-weight').value = health.weight || '';
+            document.getElementById('h-sleep').value = health.sleep_habit || '';
+            document.getElementById('h-diet').value = health.diet_pref || '';
+            document.getElementById('h-allergy').value = health.allergy_or_disease || '';
+
+            document.getElementById('p-vision').value = data.vision || '';
+            document.getElementById('p-constraints').value = data.constraints || '';
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function saveProfile() {
+        const btn = document.getElementById('save-profile-btn');
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+
+        const payload = {
+            age: parseInt(document.getElementById('p-age').value) || null,
+            gender: document.getElementById('p-gender').value,
+            occupation: document.getElementById('p-occupation').value,
+            industry: document.getElementById('p-industry').value,
+            years_of_work: parseInt(document.getElementById('p-years').value) || null,
+            education: document.getElementById('p-education').value,
+            major: document.getElementById('p-major').value,
+            health_info: {
+                height: parseFloat(document.getElementById('h-height').value) || null,
+                weight: parseFloat(document.getElementById('h-weight').value) || null,
+                sleep_habit: document.getElementById('h-sleep').value,
+                diet_pref: document.getElementById('h-diet').value,
+                allergy_or_disease: document.getElementById('h-allergy').value
+            },
+            vision: document.getElementById('p-vision').value,
+            constraints: document.getElementById('p-constraints').value
+        };
+
+        try {
+            await LifePlanner.request('/api/profile', {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+            LifePlanner.toast('个人档案更新保存成功！', 'success');
+        } catch (e) {
+            console.error(e);
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
+        }
+    }
+
+    async function loadSkills() {
+        try {
+            const skills = await LifePlanner.request('/api/skills');
+            const container = document.getElementById('skills-list');
+            if (!skills || skills.length === 0) {
+                container.innerHTML = '<div class="col-span-full py-6 text-center text-xs text-slate-500">暂无技能记录，点击右上角"添加技能"开始录入。</div>';
+                return;
+            }
+
+            container.innerHTML = skills.map(s => `
+                <div class="glass-card-interactive p-4 relative group">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs px-2 py-0.5 rounded bg-white/5 text-slate-300 font-mono">${s.category || '通用'}</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-xs font-bold text-[#00F5A0] font-mono">${s.level}/10 分</span>
+                            <button onclick="editSkill(${JSON.stringify(s).replace(/"/g, '&quot;')})" class="text-slate-400 hover:text-white p-1 text-xs">✎</button>
+                            <button onclick="deleteSkill(${s.id})" class="text-slate-400 hover:text-red-400 p-1 text-xs">✕</button>
+                        </div>
+                    </div>
+                    <div class="font-semibold text-sm text-white">${s.name}</div>
+                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2.5">
+                        <div class="bg-gradient-to-r from-emerald-500 to-[#00F5A0] h-full rounded-full" style="width: ${s.level * 10}%"></div>
+                    </div>
+                    ${s.note ? `<div class="text-[11px] text-slate-400 mt-2 truncate">${s.note}</div>` : ''}
+                </div>
+            `).join('');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function openSkillModal(skill = null) {
+        document.getElementById('skill-modal').classList.remove('hidden');
+        document.getElementById('skill-modal').classList.add('flex');
+        if (skill) {
+            document.getElementById('skill-modal-title').innerText = '编辑技能';
+            document.getElementById('modal-skill-id').value = skill.id;
+            document.getElementById('modal-skill-name').value = skill.name;
+            document.getElementById('modal-skill-category').value = skill.category || '专业技能';
+            document.getElementById('modal-skill-level').value = skill.level || 5;
+            document.getElementById('skill-level-val').innerText = skill.level || 5;
+            document.getElementById('modal-skill-note').value = skill.note || '';
+        } else {
+            document.getElementById('skill-modal-title').innerText = '添加新技能';
+            document.getElementById('modal-skill-id').value = '';
+            document.getElementById('modal-skill-name').value = '';
+            document.getElementById('modal-skill-category').value = '专业技能';
+            document.getElementById('modal-skill-level').value = 5;
+            document.getElementById('skill-level-val').innerText = '5';
+            document.getElementById('modal-skill-note').value = '';
+        }
+    }
+
+    function closeSkillModal() {
+        document.getElementById('skill-modal').classList.add('hidden');
+        document.getElementById('skill-modal').classList.remove('flex');
+    }
+
+    function editSkill(skill) {
+        openSkillModal(skill);
+    }
+
+    async function submitSkill() {
+        const id = document.getElementById('modal-skill-id').value;
+        const name = document.getElementById('modal-skill-name').value.trim();
+        if (!name) {
+            LifePlanner.toast('请输入技能名称', 'warning');
+            return;
+        }
+
+        const payload = {
+            name: name,
+            category: document.getElementById('modal-skill-category').value,
+            level: parseInt(document.getElementById('modal-skill-level').value) || 5,
+            note: document.getElementById('modal-skill-note').value.trim()
+        };
+
+        try {
+            if (id) {
+                await LifePlanner.request(`/api/skills/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload)
+                });
+                LifePlanner.toast('技能更新成功', 'success');
+            } else {
+                await LifePlanner.request('/api/skills', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                LifePlanner.toast('新技能添加成功', 'success');
+            }
+            closeSkillModal();
+            loadSkills();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function deleteSkill(id) {
+        if (!confirm('确认删除该项技能记录吗？')) return;
+        try {
+            await LifePlanner.request(`/api/skills/${id}`, { method: 'DELETE' });
+            LifePlanner.toast('技能已删除', 'success');
+            loadSkills();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadProfile();
+        loadSkills();
+    });
+</script>
+{% endblock %}

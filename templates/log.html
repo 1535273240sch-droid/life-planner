@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}今日记录 - 人生智能编排体{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    <!-- 顶部状态栏 -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-white/10">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                <span>每日生活流水</span>
+                <span class="badge-green text-xs px-2.5 py-0.5 rounded-full font-mono">Daily Log</span>
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">3分钟极简录入。只填关键项即可，AI 将基于此洞悉您的真实节奏与目标距离。</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <input type="date" id="log-date" onchange="fetchLogByDate()" class="px-3 py-1.5 text-xs font-mono">
+            <button id="save-log-btn" onclick="saveDailyLog()" class="btn-neon px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,245,160,0.3)]">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <span>保存记录</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 极简录入表单 -->
+    <div class="space-y-5">
+        <!-- 核心产出与完成事项 -->
+        <div class="glass-panel p-5 space-y-3">
+            <div class="flex items-center justify-between text-xs font-semibold text-emerald-400">
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>今日做成了什么 (Done Items)</span>
+                </div>
+                <span class="text-slate-500 font-normal">多条可用换行分隔</span>
+            </div>
+            <textarea id="log-done" rows="3" class="w-full px-3 py-2 text-sm leading-relaxed" placeholder="1. 搭建了人生规划系统的核心后端架构&#10;2. 完成了英语听力磨耳朵40分钟&#10;3. 解决了工作中的核心Bug..."></textarea>
+        </div>
+
+        <!-- 学习与技能进阶 -->
+        <div class="glass-panel p-5 space-y-3">
+            <div class="flex items-center justify-between text-xs font-semibold text-[#38BDF8]">
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                    <span>今日学习与投入 (Study & Skill)</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400">学习时长:</span>
+                    <input type="number" id="log-study-min" class="w-20 px-2 py-1 text-xs font-mono text-center" placeholder="分钟" value="0">
+                    <span class="text-slate-400">min</span>
+                </div>
+            </div>
+            <input type="text" id="log-study-note" class="w-full px-3 py-2 text-sm" placeholder="学习内容备注：如 深度学习第3章、雅思口语题库Part2、商业模式分析...">
+        </div>
+
+        <!-- 饮食记录 (AI 判断营养与建议的重要基石) -->
+        <div class="glass-panel p-5 space-y-3">
+            <div class="flex items-center gap-2 text-xs font-semibold text-amber-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                <span>今日饮食记录 (简写即可，用于营养与精力检测)</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">早餐</label>
+                    <input type="text" id="meal-breakfast" class="w-full px-3 py-1.5 text-xs" placeholder="如 燕麦鸡蛋牛奶">
+                </div>
+                <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">午餐</label>
+                    <input type="text" id="meal-lunch" class="w-full px-3 py-1.5 text-xs" placeholder="如 鸡胸肉米饭西兰花">
+                </div>
+                <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">晚餐</label>
+                    <input type="text" id="meal-dinner" class="w-full px-3 py-1.5 text-xs" placeholder="如 牛肉面 / 轻食沙拉">
+                </div>
+                <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">加餐/饮水/零食</label>
+                    <input type="text" id="meal-snack" class="w-full px-3 py-1.5 text-xs" placeholder="如 美式咖啡2杯, 坚果">
+                </div>
+            </div>
+        </div>
+
+        <!-- 睡眠与运动 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <!-- 睡眠 -->
+            <div class="glass-panel p-5 space-y-3">
+                <div class="flex items-center gap-2 text-xs font-semibold text-indigo-400">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                    <span>作息与睡眠</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">昨晚入睡时间</label>
+                        <input type="text" id="log-sleep-start" class="w-full px-3 py-2 text-xs font-mono" placeholder="如 23:40">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">今早醒来时间</label>
+                        <input type="text" id="log-sleep-end" class="w-full px-3 py-2 text-xs font-mono" placeholder="如 07:15">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 运动 -->
+            <div class="glass-panel p-5 space-y-3">
+                <div class="flex items-center gap-2 text-xs font-semibold text-[#FF4D5E]">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    <span>运动锻炼</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">运动类型</label>
+                        <input type="text" id="log-ex-type" class="w-full px-3 py-2 text-xs" placeholder="如 跑步/力量训练/跳绳">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">运动时长 (分钟)</label>
+                        <input type="number" id="log-ex-min" class="w-full px-3 py-2 text-xs font-mono" placeholder="分钟" value="0">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态自评 (心情 & 精力) 与反思 -->
+        <div class="glass-panel p-5 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                    <div class="flex justify-between text-xs font-medium text-slate-300 mb-1.5">
+                        <span>心情自评 (1-5 分):</span>
+                        <span id="mood-label" class="text-amber-400 font-bold font-mono">3 分 (平静专注)</span>
+                    </div>
+                    <input type="range" id="log-mood" min="1" max="5" value="3" class="w-full accent-amber-400" oninput="updateMoodEnergyLabel()">
+                </div>
+                <div>
+                    <div class="flex justify-between text-xs font-medium text-slate-300 mb-1.5">
+                        <span>精力电量 (1-5 分):</span>
+                        <span id="energy-label" class="text-emerald-400 font-bold font-mono">3 分 (电量充沛)</span>
+                    </div>
+                    <input type="range" id="log-energy" min="1" max="5" value="3" class="w-full accent-[#00F5A0]" oninput="updateMoodEnergyLabel()">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">今日一句话反思与复盘备注 (可选)</label>
+                <input type="text" id="log-reflection" class="w-full px-3 py-2 text-sm" placeholder="今天最大的收获是什么？哪件事节奏乱了？明天需要注意什么？">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const moodDesc = {
+        1: '1 分 (沮丧疲惫 🌧)',
+        2: '2 分 (稍显低落 ☁)',
+        3: '3 分 (平静专注 ⛅)',
+        4: '4 分 (心情舒畅 🌤)',
+        5: '5 分 (状态极佳 ☀)'
+    };
+    const energyDesc = {
+        1: '1 分 (电量告急 🪫)',
+        2: '2 分 (略有疲态)',
+        3: '3 分 (电量充沛 ⚡)',
+        4: '4 分 (活力满满 🔥)',
+        5: '5 分 (能量爆发 🚀)'
+    };
+
+    function updateMoodEnergyLabel() {
+        const m = document.getElementById('log-mood').value;
+        const e = document.getElementById('log-energy').value;
+        document.getElementById('mood-label').innerText = moodDesc[m];
+        document.getElementById('energy-label').innerText = energyDesc[e];
+    }
+
+    async function fetchLogByDate() {
+        const dateVal = document.getElementById('log-date').value;
+        try {
+            const log = await LifePlanner.request(`/api/logs?date=${dateVal}`);
+            if (log) {
+                document.getElementById('log-done').value = log.done_items || '';
+                document.getElementById('log-study-min').value = log.study_minutes || 0;
+                document.getElementById('log-study-note').value = log.study_note || '';
+
+                const meals = log.meals || {};
+                document.getElementById('meal-breakfast').value = meals.breakfast || '';
+                document.getElementById('meal-lunch').value = meals.lunch || '';
+                document.getElementById('meal-dinner').value = meals.dinner || '';
+                document.getElementById('meal-snack').value = meals.snack || '';
+
+                document.getElementById('log-sleep-start').value = log.sleep_start || '';
+                document.getElementById('log-sleep-end').value = log.sleep_end || '';
+                document.getElementById('log-ex-type').value = log.exercise_type || '';
+                document.getElementById('log-ex-min').value = log.exercise_minutes || 0;
+
+                document.getElementById('log-mood').value = log.mood || 3;
+                document.getElementById('log-energy').value = log.energy || 3;
+                document.getElementById('log-reflection').value = log.reflection || '';
+            } else {
+                // 清空表单
+                document.getElementById('log-done').value = '';
+                document.getElementById('log-study-min').value = 0;
+                document.getElementById('log-study-note').value = '';
+                document.getElementById('meal-breakfast').value = '';
+                document.getElementById('meal-lunch').value = '';
+                document.getElementById('meal-dinner').value = '';
+                document.getElementById('meal-snack').value = '';
+                document.getElementById('log-sleep-start').value = '';
+                document.getElementById('log-sleep-end').value = '';
+                document.getElementById('log-ex-type').value = '';
+                document.getElementById('log-ex-min').value = 0;
+                document.getElementById('log-mood').value = 3;
+                document.getElementById('log-energy').value = 3;
+                document.getElementById('log-reflection').value = '';
+            }
+            updateMoodEnergyLabel();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function saveDailyLog() {
+        const btn = document.getElementById('save-log-btn');
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+
+        const payload = {
+            date: document.getElementById('log-date').value,
+            done_items: document.getElementById('log-done').value.trim(),
+            study_minutes: parseInt(document.getElementById('log-study-min').value) || 0,
+            study_note: document.getElementById('log-study-note').value.trim(),
+            meals: {
+                breakfast: document.getElementById('meal-breakfast').value.trim(),
+                lunch: document.getElementById('meal-lunch').value.trim(),
+                dinner: document.getElementById('meal-dinner').value.trim(),
+                snack: document.getElementById('meal-snack').value.trim()
+            },
+            sleep_start: document.getElementById('log-sleep-start').value.trim(),
+            sleep_end: document.getElementById('log-sleep-end').value.trim(),
+            exercise_type: document.getElementById('log-ex-type').value.trim(),
+            exercise_minutes: parseInt(document.getElementById('log-ex-min').value) || 0,
+            mood: parseInt(document.getElementById('log-mood').value) || 3,
+            energy: parseInt(document.getElementById('log-energy').value) || 3,
+            reflection: document.getElementById('log-reflection').value.trim()
+        };
+
+        try {
+            await LifePlanner.request('/api/logs', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            LifePlanner.toast('今日记录已成功保存！数据持久化就绪。', 'success');
+        } catch (e) {
+            console.error(e);
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        document.getElementById('log-date').value = todayStr;
+        fetchLogByDate();
+    });
+</script>
+{% endblock %}

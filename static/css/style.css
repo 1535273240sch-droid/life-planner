@@ -1,0 +1,211 @@
+/* 人生智能编排体 (Life Planner AI) 核心设计样式 */
+:root {
+  --bg-primary: #000000;
+  --bg-card: rgba(18, 22, 28, 0.7);
+  --bg-card-hover: rgba(28, 34, 44, 0.85);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-highlight: rgba(255, 255, 255, 0.18);
+  --accent-green: #00F5A0;
+  --accent-green-glow: rgba(0, 245, 160, 0.25);
+  --accent-red: #FF4D5E;
+  --accent-red-glow: rgba(255, 77, 94, 0.25);
+  --accent-blue: #38BDF8;
+  --accent-gold: #F59E0B;
+  --text-primary: #FFFFFF;
+  --text-secondary: #CBD5E1;
+  --text-muted: #64748B;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* 微透物理毛玻璃卡片 */
+.glass-panel {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease-in-out;
+}
+
+.glass-panel:hover {
+  border-color: var(--border-highlight);
+}
+
+.glass-card-interactive {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.glass-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-highlight);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+}
+
+/* 按钮风格 */
+.btn-neon {
+  background: linear-gradient(135deg, #00F5A0, #00D284);
+  color: #000000;
+  font-weight: 600;
+  box-shadow: 0 0 15px var(--accent-green-glow);
+  transition: all 0.2s ease;
+}
+.btn-neon:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 25px rgba(0, 245, 160, 0.45);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.2s ease;
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+  border-color: var(--border-highlight);
+}
+
+/* 霓虹徽章 */
+.badge-green {
+  background: rgba(0, 245, 160, 0.12);
+  color: #00F5A0;
+  border: 1px solid rgba(0, 245, 160, 0.25);
+}
+.badge-red {
+  background: rgba(255, 77, 94, 0.12);
+  color: #FF4D5E;
+  border: 1px solid rgba(255, 77, 94, 0.25);
+}
+.badge-blue {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38BDF8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+.badge-gold {
+  background: rgba(245, 158, 11, 0.12);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+/* 输入控件优化与移动端触控优化 */
+input, select, textarea {
+  background: rgba(15, 20, 28, 0.85) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: #FFFFFF !important;
+  border-radius: 0.75rem !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+  touch-action: manipulation;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: var(--accent-green) !important;
+  box-shadow: 0 0 12px var(--accent-green-glow) !important;
+}
+
+/* 消除移动端点击 300ms 延迟与高亮灰框 */
+button, a, input, select, textarea, [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #232c38;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* 进度条动画 */
+.progress-bar-fill {
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 移动端底部安全边距与原生机身适配 */
+.mobile-bottom-pad {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 768px) {
+  /* 移动端防止 iOS Safari 在 input focus 时自动放大页面 */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* 电脑桌面端仿真手机边框 (Phone Shell Simulator) */
+@media (min-width: 640px) {
+  .phone-shell {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1),
+                0 25px 60px -15px rgba(0, 0, 0, 0.95),
+                0 0 60px -10px rgba(0, 245, 160, 0.15);
+    border-radius: 2.25rem;
+    overflow: hidden;
+    margin-top: 1.5rem;
+    margin-bottom: 2rem;
+    min-height: calc(100vh - 3.5rem);
+  }
+}
+
+/* 原生移动端底部抽屉 (Bottom Sheet) 样式 */
+.bottom-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  transition: opacity 0.25s ease-out;
+}
+
+.bottom-sheet-panel {
+  width: 100%;
+  max-width: 28rem;
+  background: #0f131a;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-top-left-radius: 1.5rem;
+  border-top-right-radius: 1.5rem;
+  padding: 1.25rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0px)) 1.25rem;
+  box-shadow: 0 -15px 40px rgba(0, 0, 0, 0.85);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drag-pill {
+  width: 2.5rem;
+  height: 0.25rem;
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 9999px;
+  margin: 0 auto 0.75rem auto;
+  cursor: grab;
+}
+

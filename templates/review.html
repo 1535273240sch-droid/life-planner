@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}复盘与缺口提醒 - 人生智能编排体{% endblock %}
+
+{% block content %}
+<div class="space-y-8 max-w-5xl mx-auto">
+    <!-- 顶部操作栏 -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-white/10">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                <span>成长复盘与缺口雷达</span>
+                <span class="badge-gold text-xs px-2.5 py-0.5 rounded-full font-mono">Review & Gap</span>
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">
+                以事实与数据为镜。检测生活盲区（D4 缺口提醒），形成闭环反馈（D3 每日/周度复盘）。
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="requestReview('daily')" class="btn-secondary px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border-emerald-500/30 text-emerald-400 hover:text-white">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>生成今日复盘</span>
+            </button>
+            <button onclick="requestReview('weekly')" class="btn-neon px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,245,160,0.3)]">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                <span>生成本周战略复盘</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- D4: 缺口检测预警雷达 (Gap Detection) -->
+    <div class="space-y-3">
+        <div class="flex items-center justify-between text-xs font-bold text-white">
+            <div class="flex items-center gap-2">
+                <div class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></div>
+                <span>生活与目标缺口探测雷达 (D4 Gaps Radar)</span>
+            </div>
+            <button onclick="loadGaps()" class="text-slate-400 hover:text-white text-xs">重新探测 ⟳</button>
+        </div>
+
+        <div id="gaps-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="col-span-full py-8 text-center text-xs text-slate-500 glass-panel">正在扫描近 7-14 天生活与目标数据...</div>
+        </div>
+    </div>
+
+    <!-- 最新复盘报告呈现卡片 -->
+    <div id="review-report-panel" class="hidden glass-panel p-6 space-y-5 border-emerald-500/40">
+        <div class="flex items-center justify-between border-b border-white/10 pb-4">
+            <div>
+                <span id="review-type-badge" class="badge-green text-xs px-2.5 py-0.5 rounded-full font-mono uppercase">DAILY REVIEW</span>
+                <h2 id="review-title" class="text-lg font-black text-white mt-1">今日战术复盘</h2>
+            </div>
+            <span id="review-time" class="text-xs text-slate-400 font-mono">--</span>
+        </div>
+
+        <div class="space-y-4">
+            <!-- 总览评价 -->
+            <div class="space-y-1">
+                <div class="text-xs font-bold text-slate-400">总体态势评估 (Summary)</div>
+                <div id="review-summary" class="text-xs text-slate-200 bg-white/5 p-3.5 rounded-xl border border-white/5 leading-relaxed"></div>
+            </div>
+
+            <!-- 亮点 vs 偏差 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1">
+                    <div id="review-sec1-title" class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <span>🌟 亮点与关键交付 (Highlights)</span>
+                    </div>
+                    <div id="review-sec1-content" class="text-xs text-emerald-100/90 bg-emerald-950/20 p-3.5 rounded-xl border border-emerald-500/20 leading-relaxed min-h-[90px]"></div>
+                </div>
+
+                <div class="space-y-1">
+                    <div id="review-sec2-title" class="text-xs font-bold text-red-400 flex items-center gap-1.5">
+                        <span>⚠️ 计划偏差与摩擦点 (Deviations)</span>
+                    </div>
+                    <div id="review-sec2-content" class="text-xs text-red-100/90 bg-red-950/20 p-3.5 rounded-xl border border-red-500/20 leading-relaxed min-h-[90px]"></div>
+                </div>
+            </div>
+
+            <!-- 下一步策略 -->
+            <div class="space-y-1">
+                <div id="review-sec3-title" class="text-xs font-bold text-[#38BDF8] flex items-center gap-1.5">
+                    <span>🎯 下阶段行动攻坚指南 (Next Actions)</span>
+                </div>
+                <div id="review-sec3-content" class="text-xs text-blue-100/90 bg-blue-950/20 p-3.5 rounded-xl border border-blue-500/20 leading-relaxed"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史复盘档案 -->
+    <div class="space-y-3">
+        <div class="flex items-center justify-between text-xs font-bold text-slate-300">
+            <span>复盘历史归档 (Review History)</span>
+            <span id="history-review-count" class="text-slate-500 font-mono">0 篇</span>
+        </div>
+        <div id="review-history-list" class="space-y-3">
+            <div class="py-6 text-center text-xs text-slate-500 glass-panel">暂无历史复盘记录</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function loadGaps() {
+        const container = document.getElementById('gaps-container');
+        try {
+            const gaps = await LifePlanner.request('/api/ai/gaps');
+            if (!gaps || gaps.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-full p-5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-3">
+                        <span class="text-lg">🎉</span>
+                        <div>各项指标运行平稳，近7天暂未发现明显的睡眠、营养或目标停滞缺口，继续保持当前的健康节拍！</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = gaps.map(g => {
+                const isWarn = g.level === '预警';
+                const isNotice = g.level === '注意';
+                const borderClass = isWarn ? 'border-red-500/30 bg-red-950/20' : (isNotice ? 'border-amber-500/30 bg-amber-950/20' : 'border-blue-500/30 bg-blue-950/20');
+                const badgeClass = isWarn ? 'badge-red' : (isNotice ? 'badge-gold' : 'badge-blue');
+
+                return `
+                    <div class="p-4 rounded-xl border ${borderClass} space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-mono px-2 py-0.5 rounded-full ${badgeClass}">${g.category} · ${g.level}</span>
+                        </div>
+                        <h4 class="text-sm font-bold text-white">${g.title}</h4>
+                        <p class="text-xs text-slate-300 leading-relaxed">${g.detail}</p>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function requestReview(type = 'daily') {
+        LifePlanner.toast(`AI 正在生成${type === 'daily' ? '今日' : '本周'}复盘分析...`, 'info');
+        try {
+            const data = await LifePlanner.request('/api/ai/review', {
+                method: 'POST',
+                body: JSON.stringify({ type: type })
+            });
+
+            renderReviewReport(data);
+            LifePlanner.toast('复盘报告已生成！', 'success');
+            loadReviewHistory();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function renderReviewReport(data) {
+        const panel = document.getElementById('review-report-panel');
+        panel.classList.remove('hidden');
+
+        const isWeekly = data.type === 'weekly';
+        document.getElementById('review-type-badge').innerText = isWeekly ? 'WEEKLY STRATEGY' : 'DAILY REVIEW';
+        document.getElementById('review-title').innerText = data.title || (isWeekly ? '本周战略复盘' : '今日战术复盘');
+        document.getElementById('review-time').innerText = new Date().toLocaleDateString('zh-CN');
+        document.getElementById('review-summary').innerText = data.summary || '无';
+
+        if (isWeekly) {
+            document.getElementById('review-sec1-title').innerHTML = '<span>📈 各重点目标推进情况 (Goal Progress)</span>';
+            document.getElementById('review-sec1-content').innerText = data.goal_progress || '无';
+
+            document.getElementById('review-sec2-title').innerHTML = '<span>⚠️ 本周最大认知与执行偏差 (Biggest Deviation)</span>';
+            document.getElementById('review-sec2-content').innerText = data.biggest_deviation || '无';
+
+            document.getElementById('review-sec3-title').innerHTML = '<span>🛡️ 下周核心攻坚策略 (Next Week Strategy)</span>';
+            document.getElementById('review-sec3-content').innerText = data.next_week_strategy || '无';
+        } else {
+            document.getElementById('review-sec1-title').innerHTML = '<span>🌟 今日亮点与关键交付 (Highlights)</span>';
+            document.getElementById('review-sec1-content').innerText = data.highlights || '无';
+
+            document.getElementById('review-sec2-title').innerHTML = '<span>⚠️ 计划偏离与未达标归因 (Deviations)</span>';
+            document.getElementById('review-sec2-content').innerText = data.deviations || '无';
+
+            document.getElementById('review-sec3-title').innerHTML = '<span>🎯 明日行动微调指南 (Next Actions)</span>';
+            document.getElementById('review-sec3-content').innerText = data.next_actions || '无';
+        }
+
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    async function loadReviewHistory() {
+        try {
+            const msgs = await LifePlanner.request('/api/ai/history?mode=review&limit=10');
+            const container = document.getElementById('review-history-list');
+            if (!msgs || msgs.length === 0) {
+                container.innerHTML = '<div class="py-6 text-center text-xs text-slate-500 glass-panel">暂无历史复盘记录</div>';
+                document.getElementById('history-review-count').innerText = '0 篇';
+                return;
+            }
+
+            document.getElementById('history-review-count').innerText = `${msgs.length} 篇`;
+            container.innerHTML = msgs.map(m => `
+                <div class="glass-panel p-4 space-y-2.5">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-white flex items-center gap-1.5">
+                            <span class="text-[#00F5A0]">📋</span> ${m.question || '复盘记录'}
+                        </span>
+                        <span class="text-[11px] text-slate-500 font-mono">${new Date(m.created_at).toLocaleString('zh-CN')}</span>
+                    </div>
+                    <div class="text-xs text-slate-300 whitespace-pre-wrap bg-white/5 p-3 rounded-lg leading-relaxed max-h-48 overflow-y-auto">
+                        ${m.answer}
+                    </div>
+                </div>
+            `).join('');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadGaps();
+        loadReviewHistory();
+    });
+</script>
+{% endblock %}

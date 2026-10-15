@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}AI 决策顾问 - 人生智能编排体{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+    <!-- 顶部标题与说明 -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-white/10">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                <span>AI 决策顾问工坊</span>
+                <span class="badge-green text-xs px-2.5 py-0.5 rounded-full font-mono">Ask Advisor</span>
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">
+                问你想做的事。AI 结合你的目标、健康与真实精力，输出【结论 ➔ 理由 ➔ 好处 ➔ 风险 ➔ 折中解 ➔ 目标关联】深度利弊推演。
+            </p>
+        </div>
+        <button onclick="loadHistory()" class="btn-secondary px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span>刷新问答历史</span>
+        </button>
+    </div>
+
+    <!-- 快捷灵感提问标签 -->
+    <div class="flex flex-wrap items-center gap-2 text-xs">
+        <span class="text-slate-400 font-medium">💡 灵感速问:</span>
+        <button onclick="quickAsk('我今晚想熬夜看球赛，可以吗？')" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-colors">
+            ⚽ 今晚熬夜看球赛？
+        </button>
+        <button onclick="quickAsk('我今晚能吃火锅吗？')" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-colors">
+            🍲 今晚能吃火锅吗？
+        </button>
+        <button onclick="quickAsk('我想辞职去做自媒体，值得吗？')" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-colors">
+            💼 辞职全职做自媒体？
+        </button>
+        <button onclick="quickAsk('我最近想报一个5000元的线上高阶技能课，该不该买？')" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-colors">
+            📚 5000元线上课该买吗？
+        </button>
+    </div>
+
+    <!-- 提问输入框 -->
+    <div class="glass-panel p-5 space-y-3 border-emerald-500/20">
+        <div class="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+            <div class="w-2 h-2 rounded-full bg-[#00F5A0] animate-pulse"></div>
+            <span>向人生顾问提问 (Ask Any Decision)</span>
+        </div>
+        <div class="relative">
+            <textarea id="advisor-question" rows="3" class="w-full px-4 py-3 text-sm pr-24 leading-relaxed" placeholder="输入任何你正在纠结的生活或成长决定，例如：&#10;“今晚有个局要喝酒，我该去吗？”、“我想把每天学习时间从1小时加到3小时，可行吗？”"></textarea>
+            <button id="ask-btn" onclick="submitQuestion()" class="absolute right-3 bottom-3 btn-neon px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,245,160,0.3)]">
+                <span>智能研判</span>
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </button>
+        </div>
+        <div class="text-[11px] text-slate-500 flex items-center justify-between">
+            <span>🛡️ 安全规则已硬核注入：绝不做虚假医疗处方，最终决定权归属于你</span>
+            <span>按 Ctrl + Enter 快速提交</span>
+        </div>
+    </div>
+
+    <!-- 研判结果展示区 (6 段式结构化卡片) -->
+    <div id="result-container" class="hidden space-y-4">
+        <div class="glass-panel p-6 space-y-5 border-emerald-500/40 shadow-[0_0_30px_rgba(0,245,160,0.1)]">
+            <div class="flex items-center justify-between border-b border-white/10 pb-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs text-slate-400">研判结论:</span>
+                    <span id="res-conclusion" class="text-sm font-black px-3.5 py-1 rounded-full font-mono">--</span>
+                </div>
+                <span class="text-xs text-slate-500 font-mono">严格依据用户档案与近7天记录生成</span>
+            </div>
+
+            <!-- 1. 理由 -->
+            <div class="space-y-1.5">
+                <div class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <span class="text-[#00F5A0]">01.</span> 研判理由与深度依据
+                </div>
+                <div id="res-reason" class="text-xs text-slate-200 leading-relaxed bg-white/5 p-3.5 rounded-xl border border-white/5"></div>
+            </div>
+
+            <!-- 2. 好处 vs 3. 坏处/风险 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                    <div class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <span class="text-emerald-400">02.</span> 预期好处与收益 (Pros)
+                    </div>
+                    <div id="res-pros" class="text-xs text-emerald-100/90 leading-relaxed bg-emerald-950/20 p-3.5 rounded-xl border border-emerald-500/20"></div>
+                </div>
+
+                <div class="space-y-1.5">
+                    <div class="text-xs font-bold text-red-400 flex items-center gap-1.5">
+                        <span class="text-red-400">03.</span> 潜在代价与风险 (Cons & Risks)
+                    </div>
+                    <div id="res-cons" class="text-xs text-red-100/90 leading-relaxed bg-red-950/20 p-3.5 rounded-xl border border-red-500/20"></div>
+                </div>
+            </div>
+
+            <!-- 4. 如果要做，怎么做更好 -->
+            <div class="space-y-1.5">
+                <div class="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                    <span class="text-amber-400">04.</span> 最佳折中方案与执行守则 (Alternative)
+                </div>
+                <div id="res-alt" class="text-xs text-amber-100/90 leading-relaxed bg-amber-950/20 p-3.5 rounded-xl border border-amber-500/20"></div>
+            </div>
+
+            <!-- 5. 与目标的关系 -->
+            <div class="space-y-1.5">
+                <div class="text-xs font-bold text-[#38BDF8] flex items-center gap-1.5">
+                    <span class="text-[#38BDF8]">05.</span> 与长期目标距离的关系 (Goal Impact)
+                </div>
+                <div id="res-goal" class="text-xs text-blue-100/90 leading-relaxed bg-blue-950/20 p-3.5 rounded-xl border border-blue-500/20"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史决策咨询记录 -->
+    <div class="space-y-3">
+        <div class="flex items-center justify-between text-xs font-bold text-slate-300">
+            <span>历史决策问答归档 (History)</span>
+            <span id="history-count" class="text-slate-500 font-mono">0 条</span>
+        </div>
+        <div id="history-container" class="space-y-3">
+            <div class="py-6 text-center text-xs text-slate-500 glass-panel">暂无问答历史</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function quickAsk(q) {
+        document.getElementById('advisor-question').value = q;
+        document.getElementById('advisor-question').focus();
+    }
+
+    async function submitQuestion() {
+        const question = document.getElementById('advisor-question').value.trim();
+        if (!question) {
+            LifePlanner.toast('请输入你想咨询的决定或问题', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('ask-btn');
+        btn.disabled = true;
+        btn.innerHTML = `<span class="animate-spin">⏳</span><span>深度推演中...</span>`;
+
+        try {
+            const data = await LifePlanner.request('/api/ai/ask', {
+                method: 'POST',
+                body: JSON.stringify({ question: question })
+            });
+
+            renderResult(data);
+            LifePlanner.toast('决策分析完成！已结构化呈现。', 'success');
+            loadHistory();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<span>智能研判</span><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`;
+        }
+    }
+
+    function renderResult(data) {
+        const container = document.getElementById('result-container');
+        container.classList.remove('hidden');
+
+        const badgeEl = document.getElementById('res-conclusion');
+        const c = data.conclusion || '建议做';
+        badgeEl.innerText = c;
+        if (c.includes('不建议')) {
+            badgeEl.className = 'text-sm font-black px-3.5 py-1 rounded-full font-mono bg-red-900/60 text-red-300 border border-red-500/40';
+        } else if (c.includes('条件')) {
+            badgeEl.className = 'text-sm font-black px-3.5 py-1 rounded-full font-mono bg-amber-900/60 text-amber-300 border border-amber-500/40';
+        } else {
+            badgeEl.className = 'text-sm font-black px-3.5 py-1 rounded-full font-mono bg-emerald-900/60 text-[#00F5A0] border border-[#00F5A0]/40';
+        }
+
+        document.getElementById('res-reason').innerText = data.reason || '无';
+        document.getElementById('res-pros').innerText = data.pros || '无';
+        document.getElementById('res-cons').innerText = data.cons_risks || '无';
+        document.getElementById('res-alt').innerText = data.alternative || '无';
+        document.getElementById('res-goal').innerText = data.goal_relation || '无';
+
+        // 平滑滚动至结果区
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    async function loadHistory() {
+        try {
+            const msgs = await LifePlanner.request('/api/ai/history?mode=advisor&limit=10');
+            const container = document.getElementById('history-container');
+            if (!msgs || msgs.length === 0) {
+                container.innerHTML = '<div class="py-6 text-center text-xs text-slate-500 glass-panel">暂无问答历史</div>';
+                document.getElementById('history-count').innerText = '0 条';
+                return;
+            }
+
+            document.getElementById('history-count').innerText = `${msgs.length} 条`;
+            container.innerHTML = msgs.map(m => `
+                <div class="glass-panel p-4 space-y-2.5 border-white/5">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-white flex items-center gap-1.5">
+                            <span class="text-[#00F5A0]">Q:</span> ${m.question || '咨询问题'}
+                        </span>
+                        <span class="text-[11px] text-slate-500 font-mono">${new Date(m.created_at).toLocaleString('zh-CN')}</span>
+                    </div>
+                    <div class="text-xs text-slate-300 whitespace-pre-wrap bg-white/5 p-3 rounded-lg leading-relaxed max-h-48 overflow-y-auto">
+                        ${m.answer}
+                    </div>
+                </div>
+            `).join('');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadHistory();
+        document.getElementById('advisor-question').addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                submitQuestion();
+            }
+        });
+    });
+</script>
+{% endblock %}
