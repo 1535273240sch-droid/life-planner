@@ -438,14 +438,104 @@
     }
 
     // AI 拆解模态窗
-    function openBreakdownModal() {
-        document.getElementById('breakdown-modal').classList.remove('hidden');
-        document.getElementById('breakdown-modal').classList.add('flex');
+    function openBreakdownModal(preselectedGoal = null) {
+        const modal = document.getElementById('breakdown-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        // 初始化归属已有宏观目标下拉框
+        const parentSelect = document.getElementById('ai-breakdown-parent');
+        parentSelect.innerHTML = '<option value="">(创建为新的独立宏观长远目标)</option>';
+        cachedGoals.forEach(g => {
+            if (g.level === 'vision' || g.level === 'long') {
+                parentSelect.innerHTML += `<option value="${g.id}">[${g.level === 'vision' ? '愿景' : '长期'}] ${g.title}</option>`;
+            }
+        });
+
+        if (preselectedGoal) {
+            parentSelect.value = preselectedGoal.id;
+            document.getElementById('ai-breakdown-title').value = preselectedGoal.title;
+            if (preselectedGoal.category) {
+                document.getElementById('ai-breakdown-category').value = preselectedGoal.category;
+            }
+            document.getElementById('ai-breakdown-desc').value = preselectedGoal.description || '';
+        } else {
+            parentSelect.value = '';
+            document.getElementById('ai-breakdown-title').value = '';
+            document.getElementById('ai-breakdown-desc').value = '';
+        }
+
+        document.getElementById('ai-breakdown-result').classList.add('hidden');
     }
 
     function closeBreakdownModal() {
         document.getElementById('breakdown-modal').classList.add('hidden');
         document.getElementById('breakdown-modal').classList.remove('flex');
+    }
+
+    function onBreakdownParentChange() {
+        const parentId = document.getElementById('ai-breakdown-parent').value;
+        if (parentId) {
+            const found = cachedGoals.find(g => g.id == parentId);
+            if (found) {
+                document.getElementById('ai-breakdown-title').value = found.title;
+                if (found.category) {
+                    document.getElementById('ai-breakdown-category').value = found.category;
+                }
+                if (found.description && !document.getElementById('ai-breakdown-desc').value) {
+                    document.getElementById('ai-breakdown-desc').value = found.description;
+                }
+            }
+        }
+    }
+
+    function renderBreakdownPreview(data) {
+        const container = document.getElementById('ai-breakdown-stages-container');
+        const statsEl = document.getElementById('ai-breakdown-stats');
+        const stages = (data && data.stages) || [];
+        let totalWeekly = 0;
+        stages.forEach(s => {
+            totalWeekly += (s.weekly_goals || s.weekly_tasks || []).length;
+        });
+
+        statsEl.innerText = `${stages.length} 个阶段里程碑 · ${totalWeekly} 个周攻坚目标`;
+
+        if (stages.length === 0) {
+            container.innerHTML = '<div class="p-3 text-slate-400 text-xs text-center glass-panel">AI 已生成策略文本，点击下方查看完整蓝图</div>';
+            return;
+        }
+
+        container.innerHTML = stages.map((s, idx) => {
+            const weekly = s.weekly_goals || s.weekly_tasks || [];
+            return `
+                <div class="p-3.5 rounded-xl bg-white/5 border border-emerald-500/30 space-y-2.5">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="badge-green text-[10px] px-2 py-0.5 rounded-full font-mono">阶段 ${idx + 1}</span>
+                            <h4 class="text-xs font-bold text-white">${s.title}</h4>
+                        </div>
+                        ${s.metric ? `<span class="text-[10px] text-[#00F5A0] font-mono">🎯 ${s.metric}</span>` : ''}
+                    </div>
+                    ${s.description ? `<p class="text-[11px] text-slate-400 leading-relaxed">${s.description}</p>` : ''}
+                    ${weekly.length > 0 ? `
+                        <div class="pl-3 border-l-2 border-purple-500/40 space-y-1.5 pt-1">
+                            <div class="text-[10px] text-purple-300 font-semibold flex items-center gap-1">
+                                <span>⚡ 周攻坚目标清单 (自动绑定父级)</span>
+                            </div>
+                            ${weekly.map(w => `
+                                <div class="flex items-start gap-1.5 text-[11px] text-slate-300 bg-black/40 px-2.5 py-1.5 rounded-lg border border-white/5">
+                                    <span class="text-purple-400 font-bold">•</span>
+                                    <div class="flex-1">
+                                        <div class="font-medium text-white">${w.title}</div>
+                                        ${w.description && w.description !== w.title ? `<div class="text-[10px] text-slate-400">${w.description}</div>` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
     }
 
     async function executeAIBreakdown() {
@@ -456,8 +546,9 @@
         }
 
         const btn = document.getElementById('ai-breakdown-btn');
+        const btnText = document.getElementById('ai-breakdown-btn-text');
         btn.disabled = true;
-        btn.innerText = 'AI 正在深度拆解中...';
+        btnText.innerText = 'AI 正在深度拆解中...';
 
         try {
             const res = await LifePlanner.request('/api/goals/ai-breakdown', {
@@ -468,57 +559,55 @@
                 })
             });
 
-            document.getElementById('ai-breakdown-result').classList.remove('hidden');
-            document.getElementById('ai-breakdown-content').innerText = res.plan || res.breakdown || JSON.stringify(res, null, 2);
             window._lastBreakdownData = res;
+            window._lastBreakdownPlanText = res.plan || '';
+
+            renderBreakdownPreview(res);
+            document.getElementById('ai-breakdown-content').innerText = res.plan || JSON.stringify(res, null, 2);
+            document.getElementById('ai-breakdown-result').classList.remove('hidden');
         } catch (e) {
             console.error(e);
         } finally {
             btn.disabled = false;
-            btn.innerText = '开始智能拆解';
+            btnText.innerText = '开始智能拆解';
         }
     }
 
     async function applyBreakdownPlan() {
         const title = document.getElementById('ai-breakdown-title').value.trim() || 'AI拆解目标';
-        const data = window._lastBreakdownData;
+        const parentSelect = document.getElementById('ai-breakdown-parent');
+        const parentId = parentSelect && parentSelect.value ? parseInt(parentSelect.value) : null;
+        const category = document.getElementById('ai-breakdown-category') ? document.getElementById('ai-breakdown-category').value : '职业';
+        const data = window._lastBreakdownData || {};
+
+        const applyBtn = document.getElementById('ai-apply-btn');
+        const applyText = document.getElementById('ai-apply-btn-text');
+        applyBtn.disabled = true;
+        applyText.innerText = '正在自动批量落库目标树...';
+
         try {
-            // 1. 创建父目标
-            const parentGoal = await LifePlanner.request('/api/goals', {
+            const payload = {
+                parent_id: parentId,
+                goal_title: title,
+                category: category,
+                plan: window._lastBreakdownPlanText || '',
+                stages: data.stages || []
+            };
+
+            const res = await LifePlanner.request('/api/goals/ai-breakdown/apply', {
                 method: 'POST',
-                body: JSON.stringify({
-                    title: title,
-                    level: 'long',
-                    category: '职业',
-                    metric: '按阶段分步交付达成',
-                    progress: 0,
-                    status: 'in_progress'
-                })
+                body: JSON.stringify(payload)
             });
 
-            // 2. 批量采纳子阶段目标
-            let stages = (data && data.stages) ? data.stages : [
-                { title: `${title} - 阶段一: 基础筑底与摸底`, level: 'stage', category: '职业', metric: '完成基础指标30%', progress: 0 },
-                { title: `${title} - 阶段二: 实战攻坚与突破`, level: 'stage', category: '职业', metric: '核心模块攻坚完成', progress: 0 },
-                { title: `${title} - 阶段三: 集成冲刺与验收`, level: 'stage', category: '职业', metric: '全真验收达标', progress: 0 }
-            ];
-
-            const batchPayload = stages.map(s => ({
-                ...s,
-                parent_id: parentGoal.id
-            }));
-
-            await LifePlanner.request('/api/goals/batch', {
-                method: 'POST',
-                body: JSON.stringify(batchPayload)
-            });
-
-            LifePlanner.toast('已成功采纳并批量生成目标分层树！', 'success');
+            LifePlanner.toast(res.message || '已成功采纳并批量生成目标分层架构树！', 'success');
             closeBreakdownModal();
-            loadGoals();
+            await loadGoals();
         } catch (e) {
             console.error(e);
-            LifePlanner.toast('采纳目标失败，请重试', 'error');
+            LifePlanner.toast(e.message || '采纳目标失败，请重试', 'error');
+        } finally {
+            applyBtn.disabled = false;
+            applyText.innerText = '采纳并自动生成目标清单';
         }
     }
 
