@@ -187,6 +187,9 @@
             <span id="ai-breakdown-btn-text">开始智能拆解</span>
         </button>
 
+        <!-- AI 失败错误卡片 (持久显示) -->
+        <div id="ai-breakdown-alert" class="hidden"></div>
+
         <div id="ai-breakdown-result" class="hidden space-y-4 pt-3 border-t border-white/10">
             <div class="flex items-center justify-between">
                 <div class="text-xs font-semibold text-emerald-400 flex items-center gap-2">
@@ -195,6 +198,7 @@
                 </div>
                 <div id="ai-breakdown-stats" class="text-[11px] font-mono text-slate-400"></div>
             </div>
+            <div id="ai-breakdown-source" class="hidden text-[11px] text-emerald-300/80 font-mono"></div>
 
             <!-- 结构化阶段目标与周任务卡片容器 -->
             <div id="ai-breakdown-stages-container" class="space-y-3 max-h-72 overflow-y-auto pr-1"></div>
@@ -258,8 +262,9 @@
         window.GOALS_CACHE = {};
         goals.forEach(g => { window.GOALS_CACHE[g.id] = g; });
 
+        const esc = LifePlanner.escapeHtml;
         container.innerHTML = goals.map(g => {
-            const badge = levelBadges[g.level] || { label: g.level, class: 'badge-blue' };
+            const badge = levelBadges[g.level] || { label: esc(g.level), class: 'badge-blue' };
             const isCompleted = g.status === 'completed';
             const isPaused = g.status === 'paused';
             const statusLabel = isCompleted ? '已完成' : (isPaused ? '暂停' : '进行中');
@@ -267,6 +272,7 @@
             const parentGoal = g.parent_id ? cachedGoals.find(p => p.id === g.parent_id) : null;
             const canAIbreakdown = g.level === 'vision' || g.level === 'long';
             const indentClass = g.level === 'weekly' ? 'sm:ml-8 border-l-2 border-purple-500/40' : (g.level === 'stage' ? 'sm:ml-4 border-l-2 border-emerald-500/40' : '');
+            const pct = Math.max(0, Math.min(100, parseInt(g.progress, 10) || 0));
 
             return `
                 <div class="glass-panel p-5 relative group border-white/10 hover:border-white/20 ${indentClass}">
@@ -274,29 +280,29 @@
                         <div class="space-y-1.5 flex-1">
                             <div class="flex items-center gap-2 flex-wrap">
                                 <span class="text-[11px] px-2 py-0.5 rounded-full font-mono ${badge.class}">${badge.label}</span>
-                                <span class="text-[11px] px-2 py-0.5 rounded bg-white/5 text-slate-400">${LifePlanner.escapeHtml(g.category || '职业')}</span>
+                                <span class="text-[11px] px-2 py-0.5 rounded bg-white/5 text-slate-400">${esc(g.category || '职业')}</span>
                                 <span class="text-[11px] font-semibold ${statusColor}">${statusLabel}</span>
-                                ${parentGoal ? `<span class="text-[11px] px-2 py-0.5 rounded bg-white/5 text-slate-300 font-mono">↳ 归属: ${LifePlanner.escapeHtml(parentGoal.title)}</span>` : ''}
-                                ${g.due_date ? `<span class="text-[11px] text-slate-400">截止: ${g.due_date}</span>` : ''}
+                                ${parentGoal ? `<span class="text-[11px] px-2 py-0.5 rounded bg-white/5 text-slate-300 font-mono">↳ 归属: ${esc(parentGoal.title)}</span>` : ''}
+                                ${g.due_date ? `<span class="text-[11px] text-slate-400">截止: ${esc(g.due_date)}</span>` : ''}
                             </div>
-                            <h3 class="text-base font-bold text-white">${LifePlanner.escapeHtml(g.title)}</h3>
-                            ${g.description ? `<p class="text-xs text-slate-300 leading-relaxed">${LifePlanner.escapeHtml(g.description)}</p>` : ''}
-                            ${g.metric ? `<div class="text-xs text-[#00F5A0] flex items-center gap-1 font-mono">🎯 检验标准: ${LifePlanner.escapeHtml(g.metric)}</div>` : ''}
+                            <h3 class="text-base font-bold text-white">${esc(g.title)}</h3>
+                            ${g.description ? `<p class="text-xs text-slate-300 leading-relaxed">${esc(g.description)}</p>` : ''}
+                            ${g.metric ? `<div class="text-xs text-[#00F5A0] flex items-center gap-1 font-mono">🎯 检验标准: ${esc(g.metric)}</div>` : ''}
                         </div>
 
                         <div class="sm:w-56 flex flex-col gap-2 pt-2 sm:pt-0 sm:border-l sm:border-white/10 sm:pl-4">
                             <div class="flex items-center justify-between text-xs font-mono">
                                 <span class="text-slate-400">完成进度</span>
-                                <span class="text-[#00F5A0] font-bold">${g.progress}%</span>
+                                <span class="text-[#00F5A0] font-bold">${pct}%</span>
                             </div>
                             <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                                <div class="bg-gradient-to-r from-emerald-500 to-[#00F5A0] h-full progress-bar-fill rounded-full" style="width: ${g.progress}%"></div>
+                                <div class="bg-gradient-to-r from-emerald-500 to-[#00F5A0] h-full progress-bar-fill rounded-full" style="width: ${pct}%"></div>
                             </div>
                             <div class="flex items-center justify-end gap-1.5 pt-1">
-                                ${canAIbreakdown ? `<button onclick="openBreakdownModalById(${g.id})" class="text-[10px] text-[#00F5A0] hover:text-white px-2 py-1 rounded bg-[#00F5A0]/10 border border-[#00F5A0]/30 font-medium">⚡AI拆解</button>` : ''}
-                                <button onclick="quickUpdateProgress(${g.id}, ${Math.min(100, g.progress + 10)})" class="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300">+10%</button>
-                                <button onclick="editGoalById(${g.id})" class="text-xs text-slate-400 hover:text-white px-2 py-1">编辑</button>
-                                <button onclick="deleteGoal(${g.id})" class="text-xs text-slate-400 hover:text-red-400 px-2 py-1">删除</button>
+                                ${canAIbreakdown ? `<button onclick="openBreakdownModalById(${parseInt(g.id, 10)})" class="text-[10px] text-[#00F5A0] hover:text-white px-2 py-1 rounded bg-[#00F5A0]/10 border border-[#00F5A0]/30 font-medium">⚡AI拆解</button>` : ''}
+                                <button onclick="quickUpdateProgress(${parseInt(g.id, 10)}, ${Math.min(100, pct + 10)})" class="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300">+10%</button>
+                                <button onclick="editGoalById(${parseInt(g.id, 10)})" class="text-xs text-slate-400 hover:text-white px-2 py-1">编辑</button>
+                                <button onclick="deleteGoal(${parseInt(g.id, 10)})" class="text-xs text-slate-400 hover:text-red-400 px-2 py-1">删除</button>
                             </div>
                         </div>
                     </div>
@@ -327,16 +333,23 @@
         loadGoals();
     }
 
+    const LEVEL_RANK = { vision: 0, long: 1, stage: 2, weekly: 3 };
+
     function updateParentSelectOptions() {
         const select = document.getElementById('modal-goal-parent');
         const currentGoalId = document.getElementById('modal-goal-id').value;
         const currentLevel = document.getElementById('modal-goal-level').value;
+        const curRank = LEVEL_RANK[currentLevel];
 
         select.innerHTML = '<option value="">(无父级 / 顶级目标)</option>';
         cachedGoals.forEach(g => {
             if (currentGoalId && g.id == currentGoalId) return;
-            // 简单防循环：只有更高级别的可以作为父级
-            select.innerHTML += `<option value="${g.id}">[${g.level}] ${g.title}</option>`;
+            // 只能选比自己层级更高的目标作为父级，避免挂到自己的下级上形成循环（后端还会再校验一次）
+            if (curRank !== undefined) {
+                const rank = LEVEL_RANK[g.level];
+                if (rank === undefined || rank >= curRank) return;
+            }
+            select.innerHTML += `<option value="${parseInt(g.id, 10)}">[${LifePlanner.escapeHtml(g.level)}] ${LifePlanner.escapeHtml(g.title)}</option>`;
         });
     }
 
@@ -429,10 +442,15 @@
 
     async function quickUpdateProgress(id, newProgress) {
         try {
-            await LifePlanner.request(`/api/goals/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify({ progress: newProgress, status: newProgress >= 100 ? 'completed' : 'in_progress' })
+            // 走"用户确认"接口；状态联动 (100→completed 等) 由后端统一处理，前端不带 status
+            const res = await LifePlanner.request('/api/goals/progress/apply', {
+                method: 'POST',
+                body: JSON.stringify({ items: [{ goal_id: id, progress: newProgress }] })
             });
+            const skipped = Array.isArray(res.skipped) ? res.skipped : [];
+            if (skipped.length > 0) {
+                LifePlanner.toast(skipped[0].reason || '该目标进度未更新', 'warning');
+            }
             loadGoals();
         } catch (e) {
             console.error(e);
@@ -440,7 +458,7 @@
     }
 
     async function deleteGoal(id) {
-        if (!confirm('确认删除该目标吗？删除后相关子目标将被解除关联。')) return;
+        if (!confirm('确认删除该目标吗？它下面的子目标会一并删除；已有的历史任务会保留。')) return;
         try {
             await LifePlanner.request(`/api/goals/${id}`, { method: 'DELETE' });
             LifePlanner.toast('目标已删除', 'success');
@@ -461,7 +479,7 @@
         parentSelect.innerHTML = '<option value="">(创建为新的独立宏观长远目标)</option>';
         cachedGoals.forEach(g => {
             if (g.level === 'vision' || g.level === 'long') {
-                parentSelect.innerHTML += `<option value="${g.id}">[${g.level === 'vision' ? '愿景' : '长期'}] ${g.title}</option>`;
+                parentSelect.innerHTML += `<option value="${parseInt(g.id, 10)}">[${g.level === 'vision' ? '愿景' : '长期'}] ${LifePlanner.escapeHtml(g.title)}</option>`;
             }
         });
 
@@ -479,6 +497,7 @@
         }
 
         document.getElementById('ai-breakdown-result').classList.add('hidden');
+        LifePlanner.clearContainer(document.getElementById('ai-breakdown-alert'));
     }
 
     function closeBreakdownModal() {
@@ -520,16 +539,17 @@
 
         container.innerHTML = stages.map((s, idx) => {
             const weekly = s.weekly_goals || s.weekly_tasks || [];
+            const esc = LifePlanner.escapeHtml;
             return `
                 <div class="p-3.5 rounded-xl bg-white/5 border border-emerald-500/30 space-y-2.5">
                     <div class="flex items-center justify-between flex-wrap gap-2">
                         <div class="flex items-center gap-2">
                             <span class="badge-green text-[10px] px-2 py-0.5 rounded-full font-mono">阶段 ${idx + 1}</span>
-                            <h4 class="text-xs font-bold text-white">${s.title}</h4>
+                            <h4 class="text-xs font-bold text-white">${esc(s.title)}</h4>
                         </div>
-                        ${s.metric ? `<span class="text-[10px] text-[#00F5A0] font-mono">🎯 ${s.metric}</span>` : ''}
+                        ${s.metric ? `<span class="text-[10px] text-[#00F5A0] font-mono">🎯 ${esc(s.metric)}</span>` : ''}
                     </div>
-                    ${s.description ? `<p class="text-[11px] text-slate-400 leading-relaxed">${s.description}</p>` : ''}
+                    ${s.description ? `<p class="text-[11px] text-slate-400 leading-relaxed">${esc(s.description)}</p>` : ''}
                     ${weekly.length > 0 ? `
                         <div class="pl-3 border-l-2 border-purple-500/40 space-y-1.5 pt-1">
                             <div class="text-[10px] text-purple-300 font-semibold flex items-center gap-1">
@@ -539,8 +559,8 @@
                                 <div class="flex items-start gap-1.5 text-[11px] text-slate-300 bg-black/40 px-2.5 py-1.5 rounded-lg border border-white/5">
                                     <span class="text-purple-400 font-bold">•</span>
                                     <div class="flex-1">
-                                        <div class="font-medium text-white">${w.title}</div>
-                                        ${w.description && w.description !== w.title ? `<div class="text-[10px] text-slate-400">${w.description}</div>` : ''}
+                                        <div class="font-medium text-white">${esc(w.title)}</div>
+                                        ${w.description && w.description !== w.title ? `<div class="text-[10px] text-slate-400">${esc(w.description)}</div>` : ''}
                                     </div>
                                 </div>
                             `).join('')}
@@ -560,8 +580,11 @@
 
         const btn = document.getElementById('ai-breakdown-btn');
         const btnText = document.getElementById('ai-breakdown-btn-text');
+        const alertEl = document.getElementById('ai-breakdown-alert');
+        const resultEl = document.getElementById('ai-breakdown-result');
         btn.disabled = true;
         btnText.innerText = 'AI 正在深度拆解中...';
+        LifePlanner.clearContainer(alertEl);
 
         try {
             const res = await LifePlanner.request('/api/goals/ai-breakdown', {
@@ -576,10 +599,16 @@
             window._lastBreakdownPlanText = res.plan || '';
 
             renderBreakdownPreview(res);
+            LifePlanner.renderSourceNote(document.getElementById('ai-breakdown-source'), res);
             document.getElementById('ai-breakdown-content').innerText = res.plan || JSON.stringify(res, null, 2);
-            document.getElementById('ai-breakdown-result').classList.remove('hidden');
+            resultEl.classList.remove('hidden');
         } catch (e) {
             console.error(e);
+            // 失败：清掉上一次的拆解预览与缓存，避免"采纳"按钮落库旧内容
+            window._lastBreakdownData = null;
+            window._lastBreakdownPlanText = '';
+            resultEl.classList.add('hidden');
+            LifePlanner.renderAIError(alertEl, e);
         } finally {
             btn.disabled = false;
             btnText.innerText = '开始智能拆解';

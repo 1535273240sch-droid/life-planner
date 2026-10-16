@@ -1,5 +1,5 @@
 // 人生智能编排体 (Life Planner AI) - PWA Service Worker
-const CACHE_NAME = 'life-planner-v1.0.0';
+const CACHE_NAME = 'life-planner-v1.1.0';
 const STATIC_ASSETS = [
   '/',
   '/static/css/style.css',

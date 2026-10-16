@@ -16,11 +16,11 @@
             </p>
         </div>
         <div class="flex items-center gap-2">
-            <button onclick="requestReview('daily')" class="btn-secondary px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border-emerald-500/30 text-emerald-400 hover:text-white">
+            <button id="review-daily-btn" onclick="requestReview('daily')" class="btn-secondary px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border-emerald-500/30 text-emerald-400 hover:text-white">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 <span>生成今日复盘</span>
             </button>
-            <button onclick="requestReview('weekly')" class="btn-neon px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,245,160,0.3)]">
+            <button id="review-weekly-btn" onclick="requestReview('weekly')" class="btn-neon px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,245,160,0.3)]">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                 <span>生成本周战略复盘</span>
             </button>
@@ -42,12 +42,16 @@
         </div>
     </div>
 
+    <!-- AI 失败错误卡片 / 危机面板 (持久显示) -->
+    <div id="review-alert" class="hidden"></div>
+
     <!-- 最新复盘报告呈现卡片 -->
     <div id="review-report-panel" class="hidden glass-panel p-6 space-y-5 border-emerald-500/40">
         <div class="flex items-center justify-between border-b border-white/10 pb-4">
             <div>
                 <span id="review-type-badge" class="badge-green text-xs px-2.5 py-0.5 rounded-full font-mono uppercase">DAILY REVIEW</span>
                 <h2 id="review-title" class="text-lg font-black text-white mt-1">今日战术复盘</h2>
+                <div id="review-source-note" class="hidden text-[11px] text-emerald-300/80 font-mono mt-1"></div>
             </div>
             <span id="review-time" class="text-xs text-slate-400 font-mono">--</span>
         </div>
@@ -82,6 +86,18 @@
                     <span>🎯 下阶段行动攻坚指南 (Next Actions)</span>
                 </div>
                 <div id="review-sec3-content" class="text-xs text-blue-100/90 bg-blue-950/20 p-3.5 rounded-xl border border-blue-500/20 leading-relaxed"></div>
+            </div>
+
+            <!-- 周复盘专属：AI 进度调整建议 (仅建议，用户确认后才写入) -->
+            <div id="progress-suggest-section" class="hidden space-y-3 pt-4 border-t border-white/10">
+                <div class="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                    <span>📊 进度调整建议 (Progress Suggestions)</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">这是 AI 的建议，不会自动更改，需要你确认才会写入。勾选想采纳的目标，可先修改建议值再提交。</p>
+                <div id="progress-suggest-list" class="space-y-2.5"></div>
+                <div id="progress-suggest-empty" class="hidden p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-300">本周数据不足以给出进度建议，目标进度保持不变。</div>
+                <button id="progress-apply-btn" onclick="applyProgressSuggestions()" disabled class="btn-neon w-full py-2.5 rounded-xl text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed">确认更新所选目标进度</button>
+                <div id="progress-apply-result" class="hidden text-xs space-y-1"></div>
             </div>
         </div>
     </div>
@@ -124,10 +140,10 @@
                 return `
                     <div class="p-4 rounded-xl border ${borderClass} space-y-2">
                         <div class="flex items-center justify-between">
-                            <span class="text-[11px] font-mono px-2 py-0.5 rounded-full ${badgeClass}">${g.category} · ${g.level}</span>
+                            <span class="text-[11px] font-mono px-2 py-0.5 rounded-full ${badgeClass}">${LifePlanner.escapeHtml(g.category)} · ${LifePlanner.escapeHtml(g.level)}</span>
                         </div>
-                        <h4 class="text-sm font-bold text-white">${g.title}</h4>
-                        <p class="text-xs text-slate-300 leading-relaxed">${g.detail}</p>
+                        <h4 class="text-sm font-bold text-white">${LifePlanner.escapeHtml(g.title)}</h4>
+                        <p class="text-xs text-slate-300 leading-relaxed">${LifePlanner.escapeHtml(g.detail)}</p>
                     </div>
                 `;
             }).join('');
@@ -137,6 +153,11 @@
     }
 
     async function requestReview(type = 'daily') {
+        const alertEl = document.getElementById('review-alert');
+        const panel = document.getElementById('review-report-panel');
+        const btns = [document.getElementById('review-daily-btn'), document.getElementById('review-weekly-btn')];
+        btns.forEach(b => { if (b) { b.disabled = true; b.classList.add('opacity-50'); } });
+        LifePlanner.clearContainer(alertEl);
         LifePlanner.toast(`AI 正在生成${type === 'daily' ? '今日' : '本周'}复盘分析...`, 'info');
         try {
             const data = await LifePlanner.request('/api/ai/review', {
@@ -144,11 +165,23 @@
                 body: JSON.stringify({ type: type })
             });
 
-            renderReviewReport(data);
-            LifePlanner.toast('复盘报告已生成！', 'success');
+            if (data.is_crisis === true) {
+                // 危机拦截：只显示危机面板，不渲染复盘报告
+                panel.classList.add('hidden');
+                LifePlanner.renderCrisisPanel(alertEl, data);
+                alertEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                renderReviewReport(data);
+                LifePlanner.toast('复盘报告已生成！', 'success');
+            }
             loadReviewHistory();
         } catch (e) {
             console.error(e);
+            // 失败：隐藏上一份报告，避免把旧内容误当成这次的结果
+            panel.classList.add('hidden');
+            LifePlanner.renderAIError(alertEl, e);
+        } finally {
+            btns.forEach(b => { if (b) { b.disabled = false; b.classList.remove('opacity-50'); } });
         }
     }
 
@@ -161,6 +194,7 @@
         document.getElementById('review-title').innerText = data.title || (isWeekly ? '本周战略复盘' : '今日战术复盘');
         document.getElementById('review-time').innerText = new Date().toLocaleDateString('zh-CN');
         document.getElementById('review-summary').innerText = data.summary || '无';
+        LifePlanner.renderSourceNote(document.getElementById('review-source-note'), data);
 
         if (isWeekly) {
             document.getElementById('review-sec1-title').innerHTML = '<span>📈 各重点目标推进情况 (Goal Progress)</span>';
@@ -182,7 +216,152 @@
             document.getElementById('review-sec3-content').innerText = data.next_actions || '无';
         }
 
+        // 进度建议仅周复盘显示；每日复盘一律隐藏
+        if (isWeekly) {
+            renderProgressSuggestions(data.progress_suggestions);
+        } else {
+            document.getElementById('progress-suggest-section').classList.add('hidden');
+        }
+
         panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ---- 周复盘：进度调整建议 (只展示，用户勾选确认后才写库) ----
+    function clampPercent(v) {
+        const n = parseInt(v, 10);
+        if (isNaN(n)) return null;
+        return Math.max(0, Math.min(100, n));
+    }
+
+    function renderProgressSuggestions(list) {
+        const section = document.getElementById('progress-suggest-section');
+        const listEl = document.getElementById('progress-suggest-list');
+        const emptyEl = document.getElementById('progress-suggest-empty');
+        const applyBtn = document.getElementById('progress-apply-btn');
+        const resultEl = document.getElementById('progress-apply-result');
+
+        section.classList.remove('hidden');
+        resultEl.classList.add('hidden');
+        resultEl.innerHTML = '';
+        const items = Array.isArray(list) ? list : [];
+
+        if (items.length === 0) {
+            listEl.innerHTML = '';
+            emptyEl.classList.remove('hidden');
+            applyBtn.classList.add('hidden');
+            return;
+        }
+
+        emptyEl.classList.add('hidden');
+        applyBtn.classList.remove('hidden');
+        listEl.innerHTML = items.map(s => {
+            const gid = parseInt(s.goal_id, 10);
+            const cur = clampPercent(s.current_progress);
+            const sug = clampPercent(s.suggested_progress);
+            return `
+                <div class="p-3 rounded-xl bg-amber-950/20 border border-amber-500/20 space-y-2" data-goal-id="${gid}">
+                    <div class="flex items-start gap-3">
+                        <input type="checkbox" class="ps-check mt-0.5 w-5 h-5 rounded accent-[#00F5A0] cursor-pointer flex-shrink-0" aria-label="采纳对「${LifePlanner.escapeHtml(s.title)}」的进度建议" onchange="updateProgressApplyState()">
+                        <div class="flex-1 min-w-0 space-y-1">
+                            <div class="text-xs font-bold text-white">${LifePlanner.escapeHtml(s.title)}</div>
+                            <div class="text-[11px] font-mono text-slate-300">当前 ${cur === null ? '-' : cur}% → 建议 ${sug === null ? '-' : sug}%</div>
+                            <div class="text-[11px] text-slate-400 leading-relaxed">${LifePlanner.escapeHtml(s.reason)}</div>
+                        </div>
+                        <div class="flex flex-col items-end gap-0.5 flex-shrink-0">
+                            <label class="text-[10px] text-slate-500">写入值 %</label>
+                            <input type="number" min="0" max="100" step="1" inputmode="numeric" value="${sug === null ? '' : sug}" class="ps-value w-16 px-2 py-1 text-xs font-mono text-center rounded-lg" aria-label="写入进度百分比" oninput="updateProgressApplyState()">
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        updateProgressApplyState();
+    }
+
+    // 只收集被勾选且数值合法的项；一个都没勾选则禁用按钮
+    function collectSelectedProgress() {
+        const out = [];
+        let invalid = false;
+        document.querySelectorAll('#progress-suggest-list [data-goal-id]').forEach(row => {
+            const checked = row.querySelector('.ps-check').checked;
+            if (!checked) return;
+            const raw = row.querySelector('.ps-value').value;
+            const progress = raw === '' ? null : clampPercent(raw);
+            const goalId = parseInt(row.getAttribute('data-goal-id'), 10);
+            if (progress === null || isNaN(goalId) || String(progress) !== String(parseInt(raw, 10))) {
+                invalid = true;
+                return;
+            }
+            out.push({ goal_id: goalId, progress: progress });
+        });
+        return { items: out, invalid: invalid };
+    }
+
+    function updateProgressApplyState() {
+        const btn = document.getElementById('progress-apply-btn');
+        const sel = collectSelectedProgress();
+        btn.disabled = sel.items.length === 0 || sel.invalid;
+    }
+
+    async function applyProgressSuggestions() {
+        const btn = document.getElementById('progress-apply-btn');
+        const resultEl = document.getElementById('progress-apply-result');
+        const sel = collectSelectedProgress();
+        if (sel.invalid) {
+            LifePlanner.toast('请把写入值改成 0-100 的整数', 'warning');
+            return;
+        }
+        if (sel.items.length === 0) return;
+
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+        try {
+            const res = await LifePlanner.request('/api/goals/progress/apply', {
+                method: 'POST',
+                body: JSON.stringify({ items: sel.items })
+            });
+            const updated = Array.isArray(res.updated) ? res.updated : [];
+            const skipped = Array.isArray(res.skipped) ? res.skipped : [];
+            const titleOf = (gid) => {
+                const row = document.querySelector(`#progress-suggest-list [data-goal-id="${parseInt(gid, 10)}"] .text-white`);
+                return row ? row.textContent : `目标 #${gid}`;
+            };
+            const statusLabel = { in_progress: '进行中', completed: '已完成', paused: '暂停' };
+
+            let html = '';
+            if (updated.length > 0) {
+                html += updated.map(u => `<div class="text-emerald-300">✓ 已更新「${LifePlanner.escapeHtml(titleOf(u.goal_id))}」→ ${LifePlanner.escapeHtml(u.progress)}%（${LifePlanner.escapeHtml(statusLabel[u.status] || u.status || '')}）</div>`).join('');
+            }
+            if (skipped.length > 0) {
+                html += skipped.map(k => `<div class="text-amber-300">• 已跳过「${LifePlanner.escapeHtml(titleOf(k.goal_id))}」：${LifePlanner.escapeHtml(k.reason || '原因未说明')}</div>`).join('');
+            }
+            resultEl.innerHTML = html;
+            resultEl.classList.toggle('hidden', html === '');
+
+            if (updated.length > 0 && skipped.length === 0) {
+                LifePlanner.toast(`已更新 ${updated.length} 个目标的进度`, 'success');
+            } else if (updated.length > 0) {
+                LifePlanner.toast(`已更新 ${updated.length} 个，跳过 ${skipped.length} 个（详情见下方）`, 'warning');
+            } else {
+                LifePlanner.toast(`没有目标被更新，${skipped.length} 个被跳过（详情见下方）`, 'warning');
+            }
+
+            // 已处理的行取消勾选并禁用，避免重复提交
+            const doneIds = new Set(updated.map(u => String(u.goal_id)));
+            document.querySelectorAll('#progress-suggest-list [data-goal-id]').forEach(row => {
+                if (doneIds.has(row.getAttribute('data-goal-id'))) {
+                    row.querySelector('.ps-check').checked = false;
+                    row.querySelector('.ps-check').disabled = true;
+                    row.querySelector('.ps-value').disabled = true;
+                    row.classList.add('opacity-60');
+                }
+            });
+        } catch (e) {
+            console.error(e);
+        } finally {
+            btn.classList.remove('opacity-50');
+            updateProgressApplyState();
+        }
     }
 
     async function loadReviewHistory() {
@@ -199,13 +378,14 @@
             container.innerHTML = msgs.map(m => `
                 <div class="glass-panel p-4 space-y-2.5">
                     <div class="flex items-center justify-between text-xs">
-                        <span class="font-bold text-white flex items-center gap-1.5">
-                            <span class="text-[#00F5A0]">📋</span> ${m.question || '复盘记录'}
+                        <span class="font-bold text-white flex items-center gap-1.5 flex-wrap">
+                            <span class="text-[#00F5A0]">📋</span> ${LifePlanner.escapeHtml(m.question || '复盘记录')}
+                            ${LifePlanner.legacyBadgeHtml(m)}
                         </span>
                         <span class="text-[11px] text-slate-500 font-mono">${new Date(m.created_at).toLocaleString('zh-CN')}</span>
                     </div>
                     <div class="text-xs text-slate-300 whitespace-pre-wrap bg-white/5 p-3 rounded-lg leading-relaxed max-h-48 overflow-y-auto">
-                        ${m.answer}
+                        ${LifePlanner.escapeHtml(m.answer)}
                     </div>
                 </div>
             `).join('');

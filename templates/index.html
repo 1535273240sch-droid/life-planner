@@ -47,7 +47,7 @@
                 <span id="task-stats-badge" class="badge-green text-[10px] px-2 py-0.5 rounded-full font-mono">0/0 完成</span>
             </div>
             <div class="flex items-center gap-1.5">
-                <button onclick="requestDailyPlan()" class="text-[11px] text-emerald-400 hover:text-white flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 active:bg-white/10 transition-colors">
+                <button id="ai-plan-btn" onclick="requestDailyPlan()" class="text-[11px] text-emerald-400 hover:text-white flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 active:bg-white/10 transition-colors disabled:opacity-50">
                     <span>✨ AI规划</span>
                 </button>
                 <button onclick="openAddTaskModal()" class="btn-secondary text-[11px] px-2.5 py-1.5 rounded-lg flex items-center gap-1 active:scale-95">
@@ -56,6 +56,9 @@
             </div>
         </div>
 
+        <!-- AI 失败错误卡片 / 危机面板 (持久显示) -->
+        <div id="ai-daily-alert" class="hidden"></div>
+
         <!-- AI 今日智能体建议卡片 -->
         <div id="ai-daily-banner" class="hidden p-3 rounded-xl bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/30 text-xs text-slate-200 space-y-1">
             <div class="flex items-center gap-1.5 text-emerald-400 font-semibold text-[11px]">
@@ -63,6 +66,7 @@
                 <span>智能体行动提示：</span>
             </div>
             <div id="ai-daily-text" class="leading-relaxed text-xs"></div>
+            <div id="ai-daily-source" class="hidden text-[10px] text-emerald-300/80 font-mono"></div>
         </div>
 
         <!-- 任务列表容器 (拇指大靶心优化) -->
@@ -277,15 +281,16 @@
             }
 
             container.innerHTML = goals.slice(0, 4).map(g => {
-                select.innerHTML += `<option value="${g.id}">${g.title}</option>`;
+                select.innerHTML += `<option value="${parseInt(g.id, 10)}">${LifePlanner.escapeHtml(g.title)}</option>`;
+                const pct = Math.max(0, Math.min(100, parseInt(g.progress, 10) || 0));
                 return `
                     <div class="space-y-1">
                         <div class="flex justify-between text-xs">
-                            <span class="text-slate-200 font-medium truncate max-w-[70%]">${g.title}</span>
-                            <span class="text-[#00F5A0] font-mono font-bold">${g.progress}%</span>
+                            <span class="text-slate-200 font-medium truncate max-w-[70%]">${LifePlanner.escapeHtml(g.title)}</span>
+                            <span class="text-[#00F5A0] font-mono font-bold">${pct}%</span>
                         </div>
                         <div class="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
-                            <div class="bg-gradient-to-r from-emerald-500 to-[#00F5A0] h-full rounded-full progress-bar-fill" style="width: ${g.progress}%"></div>
+                            <div class="bg-gradient-to-r from-emerald-500 to-[#00F5A0] h-full rounded-full progress-bar-fill" style="width: ${pct}%"></div>
                         </div>
                     </div>
                 `;
@@ -672,18 +677,39 @@
     }
 
     async function requestDailyPlan() {
+        const btn = document.getElementById('ai-plan-btn');
+        const alertEl = document.getElementById('ai-daily-alert');
+        const banner = document.getElementById('ai-daily-banner');
+        btn.disabled = true;
+        LifePlanner.clearContainer(alertEl);
         LifePlanner.toast('正在由 AI 智能体编排今日规划...', 'info');
         try {
             const res = await LifePlanner.request('/api/ai/daily-plan', { method: 'POST' });
-            if (res && res.tip) {
-                document.getElementById('ai-daily-banner').classList.remove('hidden');
-                const badge = res.source === 'offline_mock' ? '【⚠️ 本地规则参考】' : '【✨ AI智能编排】';
-                document.getElementById('ai-daily-text').innerText = `${badge} ${res.tip}`;
+
+            if (res && res.is_crisis === true) {
+                // 危机拦截：后端不会写任务，这里也不刷新任务、不显示规划提示
+                banner.classList.add('hidden');
+                LifePlanner.renderCrisisPanel(alertEl, res);
+                alertEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return;
             }
-            LifePlanner.toast(res.source === 'offline_mock' ? '今日规划已生成 (本地规则模式)' : 'AI 规划已生成！', 'success');
+
+            if (res && res.tip) {
+                banner.classList.remove('hidden');
+                document.getElementById('ai-daily-text').innerText = res.tip;
+                LifePlanner.renderSourceNote(document.getElementById('ai-daily-source'), res);
+            } else {
+                banner.classList.add('hidden');
+            }
+            LifePlanner.toast('AI 规划已生成！', 'success');
             loadTasks();
         } catch (e) {
             console.error(e);
+            // 失败：隐藏旧提示，显示持久错误卡片；不刷新出任何"替代"任务
+            banner.classList.add('hidden');
+            LifePlanner.renderAIError(alertEl, e);
+        } finally {
+            btn.disabled = false;
         }
     }
 

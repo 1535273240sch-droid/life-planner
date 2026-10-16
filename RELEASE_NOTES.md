@@ -1,5 +1,42 @@
 # 🚀 人生智能编排体 (Life Planner AI) 版本发布日志
 
+## [v1.1.0] - 2026-10-16 诚实化与加固版
+
+本版本的主线是：让文档和行为与事实一致，并修复审核报告中指出的问题。
+
+> **取代说明**：下方 v1.0.4 及更早版本中关于「双模透明化」「离线降级 / 本地规则演示模式」「无 Key 时 100% 本地运行」「APK 离线秒开」的说法，以及 v1.0.4 中「全量 11 项自动化测试 100% 通过」的结论，均已被本版本取代，保留原文仅作历史记录。当时的测试之所以能通过，正是因为存在本版本已移除的模板降级路径；并且旧测试会直接读写你的真实 `life_planner.db`。自 v1.1.0 起：AI 不再降级，测试改用临时数据库隔离，APK 也不能离线使用。
+
+### AI 行为变化
+1. **AI 不再降级为模板**：未配置 `AI_API_KEY`，或模型不可用（连不上、超时、鉴权失败、限流、返回内容无法解析）时，AI 接口返回 HTTP 错误和中文说明，不再生成替代内容，也不会写入任务或 AI 记录。已移除 `AI_MOCK_FALLBACK` 配置项。
+2. **危机拦截覆盖更多入口**：除决策顾问外，每日/每周复盘和每日规划也会先做本地危机内容筛查，命中时不调用模型。
+3. **周复盘的进度建议需用户确认**：AI 只给出建议值和理由，用户确认后才通过 `POST /api/goals/progress/apply` 写入，AI 不会自己修改目标进度。
+4. **AI 记录标注来源**：新记录带 `model_name`；来源取值为 `ai_model`、`crisis_safety_guard`、`legacy_unverified`。
+5. **默认模型配置不再偏向某一家**：默认 `AI_BASE_URL=https://api.openai.com/v1`、`AI_MODEL=gpt-4o-mini`，任何兼容 OpenAI 协议的端点均可使用。
+
+### 数据
+6. **目标软删除**：删除目标只标记 `deleted_at`（子目标一并标记），名下历史任务保留，复盘历史可追溯。
+7. **数据库迁移**：`migrate_db()` 幂等地添加 `goals.deleted_at`、`ai_messages.model_name`，并把旧版本的 `ai_model` / `offline_mock` 记录标记为 `legacy_unverified`（来源未核实）。
+
+### Android
+8. **改用 `WebViewAssetLoader` 加载页面**（`https://appassets.androidplatform.net/assets/...`），并关闭 `allowFileAccess`、`allowContentAccess`、`allowFileAccessFromFileURLs`、`allowUniversalAccessFromFileURLs`。此前页面从 `file://` 加载，`fetch` 相对路径会变成 `file:///api/...` 而失败。
+9. **后端地址与错误提示**：未设置地址、连不上服务器、后端返回错误时都会弹出明确提示（不再静默）；保存地址时校验 `http://` / `https://` 开头并去掉末尾斜杠，`http://` 仅允许局域网/本机地址。状态胶囊「本地离线」改为「未连接服务器」，App 没有后端不能使用。
+10. **收紧权限**：`allowBackup` 改为 `false`。明文 HTTP 仍然允许（`network-security-config` 不支持按网段放行，局域网 IP 无法逐个列举），详见 README 的风险说明。
+11. **构建**：`gradle-wrapper.properties` 的 Gradle 版本统一为 8.4（与 CI 一致）；`build_apk.bat` 先找 `gradlew.bat`，再找全局 `gradle`，都没有时给出下一步说明。仓库仍未提交 `gradle-wrapper.jar`。
+12. 版本号：`versionCode 2`、`versionName 1.1.0`。
+
+### 其他
+13. **XSS 转义补全**：Android 内置页面对任务、目标、缺口等插值统一转义。
+14. **测试隔离**：测试改用临时数据库，不再写入 `life_planner.db`；运行方式为 `py -m pytest -q`，`pytest` 移到 `requirements-dev.txt`。
+15. **依赖加上界**：`requirements.txt` 为各依赖补充了大版本上限。
+16. **启动与配置**：`start.py` 横幅在未配置 Key 时提示 AI 功能将报错，并提示服务无登录保护；`.env.example` 的 `DEBUG` 默认值改为 `False`。
+17. **README**：如实写明配置 Key 后健康数据、档案、目标和近 7 天日志会发送给模型服务商；写明服务无登录保护。
+
+### 尚未验证
+- Android 代码（Kotlin / Gradle）**没有在本机编译**，本次开发环境没有 JDK、Android SDK 和 Gradle；编译结果以 CI 或你自己的构建为准。
+- 未在真机或模拟器上运行过 APK。
+
+---
+
 ## [v1.0.4] - 2026-10-16 权威审核全面达标版 (Audit Verification & Security Hardening)
 
 本版本基于权威《审核报告》中的专项检测，对系统的安全机制、算法严谨度、双模透明度与原生移动端通信进行了全方位加固与重构，全量 11 项自动化测试 100% 通过（0 警告、0 错误）。

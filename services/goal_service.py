@@ -7,7 +7,7 @@ from schemas import GoalCreate, GoalUpdate, TaskCreate, TaskUpdate, ApplyBreakdo
 from services.profile_service import get_or_create_user
 
 def get_goals(db: Session, user_id: int = 1, status: Optional[str] = None, level: Optional[str] = None) -> List[Goal]:
-    query = db.query(Goal).filter(Goal.user_id == user_id)
+    query = db.query(Goal).filter(Goal.user_id == user_id, Goal.deleted_at.is_(None))
     if status:
         query = query.filter(Goal.status == status)
     if level:
@@ -15,8 +15,8 @@ def get_goals(db: Session, user_id: int = 1, status: Optional[str] = None, level
     return query.order_by(Goal.id.asc()).all()
 
 def get_goal_tree(db: Session, user_id: int = 1) -> List[dict]:
-    """获取树形组织的目标结构：顶级目标包含 children 属性"""
-    all_goals = db.query(Goal).filter(Goal.user_id == user_id).all()
+    """获取树形组织的目标结构：顶级目标包含 children 属性（不含已软删除目标）"""
+    all_goals = db.query(Goal).filter(Goal.user_id == user_id, Goal.deleted_at.is_(None)).all()
     goals_dict = {}
     for g in all_goals:
         goals_dict[g.id] = {
@@ -33,7 +33,7 @@ def get_goal_tree(db: Session, user_id: int = 1) -> List[dict]:
             "status": g.status,
             "children": []
         }
-    
+
     roots = []
     for g in all_goals:
         node = goals_dict[g.id]
@@ -41,13 +41,83 @@ def get_goal_tree(db: Session, user_id: int = 1) -> List[dict]:
             goals_dict[g.parent_id]["children"].append(node)
         else:
             roots.append(node)
+
+    # 兜底：从根向下标记可达节点。若历史数据里父级链闭合（成环），这些节点挂不到任何根上，
+    # 就会从目标树里消失且界面无从管理。这里在环内 id 最小的节点处断开并提升为根。
+    reachable = set()
+    stack = [r["id"] for r in roots]
+    while stack:
+        cur = stack.pop()
+        if cur in reachable:
+            continue
+        reachable.add(cur)
+        stack.extend(ch["id"] for ch in goals_dict[cur]["children"])
+
+    for gid in sorted(g.id for g in all_goals if g.id not in reachable):
+        if gid in reachable:
+            continue
+        node = goals_dict[gid]
+        parent_id = node["parent_id"]
+        if parent_id in goals_dict:
+            goals_dict[parent_id]["children"] = [
+                c for c in goals_dict[parent_id]["children"] if c["id"] != gid
+            ]
+        node["parent_id"] = None
+        roots.append(node)
+        # 从这个新的根出发重新标记，把同一环上的其他节点一并带出来
+        stack = [gid]
+        while stack:
+            cur = stack.pop()
+            if cur in reachable:
+                continue
+            reachable.add(cur)
+            stack.extend(ch["id"] for ch in goals_dict[cur]["children"])
+
     return roots
 
 def get_goal_by_id(db: Session, goal_id: int, user_id: int = 1) -> Optional[Goal]:
+    return db.query(Goal).filter(
+        Goal.id == goal_id, Goal.user_id == user_id, Goal.deleted_at.is_(None)
+    ).first()
+
+
+def validate_parent(db: Session, user_id: int, parent_id: Optional[int], goal_id: Optional[int] = None) -> Optional[str]:
+    """校验父级目标可用。返回中文错误说明；None 表示通过。
+
+    规则：父级必须存在、未删除、属于当前用户，且不能形成环（不能是自己，也不能是自己的下级）。
+    成环会让相关目标在目标树里彻底消失，所以在这里挡住，而不是留给前端。
+    """
+    if parent_id is None:
+        return None
+    if goal_id is not None and parent_id == goal_id:
+        return "父级目标不能是它自己"
+    parent = db.query(Goal).filter(
+        Goal.id == parent_id, Goal.user_id == user_id, Goal.deleted_at.is_(None)
+    ).first()
+    if parent is None:
+        return "父级目标不存在或已被删除"
+    if goal_id is None:
+        return None
+    seen = set()
+    cur = parent
+    while cur is not None and cur.id not in seen:
+        if cur.id == goal_id:
+            return "不能把自己的下级目标设为父级（会形成循环）"
+        seen.add(cur.id)
+        cur = db.query(Goal).filter(
+            Goal.id == cur.parent_id, Goal.user_id == user_id
+        ).first() if cur.parent_id else None
+    return None
+
+def get_goal_including_deleted(db: Session, goal_id: int, user_id: int = 1) -> Optional[Goal]:
+    """含已软删除目标的查询，供复盘等历史场景取目标名称"""
     return db.query(Goal).filter(Goal.id == goal_id, Goal.user_id == user_id).first()
 
 def create_goal(db: Session, user_id: int, goal_in: GoalCreate) -> Goal:
     get_or_create_user(db, user_id)
+    err = validate_parent(db, user_id, goal_in.parent_id)
+    if err:
+        raise ValueError(err)
     goal = Goal(
         user_id=user_id,
         parent_id=goal_in.parent_id,
@@ -68,6 +138,10 @@ def create_goal(db: Session, user_id: int, goal_in: GoalCreate) -> Goal:
 
 def create_goals_batch(db: Session, user_id: int, goals_in: List[GoalCreate]) -> List[Goal]:
     get_or_create_user(db, user_id)
+    for g_in in goals_in:
+        err = validate_parent(db, user_id, g_in.parent_id)
+        if err:
+            raise ValueError(err)
     created_goals = []
     for g_in in goals_in:
         goal = Goal(
@@ -95,6 +169,10 @@ def update_goal(db: Session, goal_id: int, user_id: int, goal_in: GoalUpdate) ->
     if not goal:
         return None
     data = goal_in.model_dump(exclude_unset=True)
+    if "parent_id" in data:
+        err = validate_parent(db, user_id, data["parent_id"], goal_id=goal_id)
+        if err:
+            raise ValueError(err)
     for field, value in data.items():
         setattr(goal, field, value)
     db.commit()
@@ -102,14 +180,59 @@ def update_goal(db: Session, goal_id: int, user_id: int, goal_in: GoalUpdate) ->
     return goal
 
 def delete_goal(db: Session, goal_id: int, user_id: int) -> bool:
+    """软删除目标及其整棵子树：只写 deleted_at，不删行、不动 tasks"""
     goal = get_goal_by_id(db, goal_id, user_id)
     if not goal:
         return False
-    # 将其子目标的 parent_id 置空
-    db.query(Goal).filter(Goal.parent_id == goal_id).update({Goal.parent_id: None})
-    db.delete(goal)
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    visited = set()
+    frontier = [goal.id]
+    while frontier:
+        visited.update(frontier)
+        children = db.query(Goal).filter(
+            Goal.user_id == user_id,
+            Goal.parent_id.in_(frontier),
+        ).all()
+        frontier = [c.id for c in children if c.id not in visited]
+    db.query(Goal).filter(
+        Goal.user_id == user_id, Goal.id.in_(visited), Goal.deleted_at.is_(None)
+    ).update({Goal.deleted_at: now}, synchronize_session=False)
     db.commit()
     return True
+
+def apply_progress(db: Session, user_id: int, items: List[Any]) -> Dict[str, Any]:
+    """用户确认后写入目标进度。AI 路径（ai_agent）不得调用本函数。
+    注意：目标的新建/编辑表单仍可直接设置 progress，本函数只是"AI 建议"的唯一落点。
+    状态联动：progress >= 100 → completed；completed 且新值 < 100 → 回到 in_progress；
+    paused 仅在 progress < 100 时保持暂停（被确认到 100% 时按完成处理）。
+    同一 goal_id 重复出现以最后一项为准；整个请求在一个事务里提交，异常整体回滚。"""
+    latest: Dict[int, int] = {}
+    for it in items:
+        latest[it.goal_id] = it.progress  # 重复 id 以最后一项为准（dict 保持首次出现的顺序）
+
+    updated: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    try:
+        for goal_id, progress in latest.items():
+            goal = db.query(Goal).filter(Goal.id == goal_id, Goal.user_id == user_id).first()
+            if goal is None:
+                skipped.append({"goal_id": goal_id, "reason": "目标不存在"})
+                continue
+            if goal.deleted_at is not None:
+                skipped.append({"goal_id": goal_id, "reason": "目标已删除"})
+                continue
+            goal.progress = progress
+            if progress >= 100:
+                goal.status = "completed"
+            elif goal.status == "completed":
+                goal.status = "in_progress"
+            # paused 与其余状态保持不变
+            updated.append({"goal_id": goal.id, "progress": goal.progress, "status": goal.status})
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"updated": updated, "skipped": skipped}
 
 # --- 任务服务 ---
 def get_tasks(db: Session, user_id: int = 1, target_date: Optional[datetime.date] = None, goal_id: Optional[int] = None) -> List[Task]:
@@ -230,7 +353,9 @@ def apply_ai_breakdown(db: Session, user_id: int, req: ApplyBreakdownRequest) ->
     stage_parent_id = None
 
     if req.parent_id:
-        parent_goal = db.query(Goal).filter(Goal.id == req.parent_id, Goal.user_id == user_id).first()
+        parent_goal = db.query(Goal).filter(
+            Goal.id == req.parent_id, Goal.user_id == user_id, Goal.deleted_at.is_(None)
+        ).first()
         if parent_goal:
             stage_parent_id = parent_goal.id
 

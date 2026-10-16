@@ -77,6 +77,7 @@ class Goal(Base):
     due_date = Column(Date, nullable=True)
     progress = Column(Integer, default=0)           # 0-100
     status = Column(String(20), default="in_progress") # in_progress (进行中) / completed (已完成) / paused (暂停)
+    deleted_at = Column(DateTime, nullable=True)    # 软删除时间；非空即视为已删除，名下历史任务保留
 
     user = relationship("User", back_populates="goals")
     parent = relationship("Goal", remote_side=[id], backref="children")
@@ -136,7 +137,8 @@ class AiMessage(Base):
     mode = Column(String(30), nullable=False)
     question = Column(Text, nullable=True)
     answer = Column(Text, nullable=False)
-    source = Column(String(50), default="ai_model") # ai_model / offline_mock / crisis_safety_guard
+    source = Column(String(50), default="ai_model") # ai_model / crisis_safety_guard / legacy_unverified
+    model_name = Column(String(100), nullable=True) # 实际调用的模型名；非 AI 产出（如危机拦截）为空
     created_at = Column(DateTime, default=utc_now)
 
     user = relationship("User", back_populates="ai_messages")

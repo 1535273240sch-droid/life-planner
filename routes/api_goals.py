@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Union
 from database import get_db
-from schemas import GoalOut, GoalCreate, GoalUpdate, GoalBatchCreate, ApplyBreakdownRequest, ApplyBreakdownResponse, AIBreakdownRequest
+from schemas import GoalOut, GoalCreate, GoalUpdate, GoalBatchCreate, ApplyBreakdownRequest, ApplyBreakdownResponse, AIBreakdownRequest, GoalProgressApplyRequest, GoalProgressApplyResponse
 from services import goal_service
 from config import settings
 
@@ -22,7 +22,10 @@ def get_goal_tree(db: Session = Depends(get_db)):
 
 @router.post("", response_model=GoalOut)
 def create_goal(goal_in: GoalCreate, db: Session = Depends(get_db)):
-    return goal_service.create_goal(db, user_id=settings.DEFAULT_USER_ID, goal_in=goal_in)
+    try:
+        return goal_service.create_goal(db, user_id=settings.DEFAULT_USER_ID, goal_in=goal_in)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/batch", response_model=List[GoalOut])
 def create_goals_batch(batch_in: Union[List[GoalCreate], GoalBatchCreate], db: Session = Depends(get_db)):
@@ -36,11 +39,22 @@ def create_goals_batch(batch_in: Union[List[GoalCreate], GoalBatchCreate], db: S
                     item.parent_id = parent_id
     else:
         items = batch_in
-    return goal_service.create_goals_batch(db, user_id=settings.DEFAULT_USER_ID, goals_in=items)
+    try:
+        return goal_service.create_goals_batch(db, user_id=settings.DEFAULT_USER_ID, goals_in=items)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/progress/apply", response_model=GoalProgressApplyResponse)
+def apply_goal_progress(req: GoalProgressApplyRequest, db: Session = Depends(get_db)):
+    """用户确认后写入目标进度。必须声明在 /{goal_id} 系列路由之前。"""
+    return goal_service.apply_progress(db, user_id=settings.DEFAULT_USER_ID, items=req.items)
 
 @router.put("/{goal_id}", response_model=GoalOut)
 def update_goal(goal_id: int, goal_in: GoalUpdate, db: Session = Depends(get_db)):
-    goal = goal_service.update_goal(db, goal_id=goal_id, user_id=settings.DEFAULT_USER_ID, goal_in=goal_in)
+    try:
+        goal = goal_service.update_goal(db, goal_id=goal_id, user_id=settings.DEFAULT_USER_ID, goal_in=goal_in)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not goal:
         raise HTTPException(status_code=404, detail="目标不存在")
     return goal
@@ -53,15 +67,19 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     return {"message": "目标删除成功"}
 
 @router.post("/ai-breakdown")
-def ai_breakdown_goal(req: Union[AIBreakdownRequest, dict], db: Session = Depends(get_db)):
+def ai_breakdown_goal(req: AIBreakdownRequest, db: Session = Depends(get_db)):
     import ai_agent
-    if isinstance(req, AIBreakdownRequest):
-        title = req.goal_title or "未命名目标"
-        desc = req.goal_description
-    else:
-        title = req.get("goal_title") or "未命名目标"
-        desc = req.get("goal_description")
-    return ai_agent.breakdown_goal(db, user_id=settings.DEFAULT_USER_ID, goal_title=title, goal_desc=desc)
+    title = (req.goal_title or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="请输入拆解目标主题")
+    # AIError 由 Worker A 在 ai_agent 中定义；按名称延迟获取，A 完成前后均可导入
+    ai_error_cls = getattr(ai_agent, "AIError", None)
+    try:
+        return ai_agent.breakdown_goal(db, user_id=settings.DEFAULT_USER_ID, goal_title=title, goal_desc=req.goal_description)
+    except Exception as e:
+        if ai_error_cls is not None and isinstance(e, ai_error_cls):
+            raise HTTPException(status_code=e.status_code, detail={"code": e.code, "message": e.message})
+        raise
 
 @router.post("/ai-breakdown/apply", response_model=ApplyBreakdownResponse)
 def apply_ai_breakdown(req: ApplyBreakdownRequest, db: Session = Depends(get_db)):

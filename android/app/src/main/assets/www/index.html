@@ -59,7 +59,7 @@
             </div>
         </div>
         <button onclick="openServerConfigModal()" class="text-xs px-2.5 py-1 rounded-full bg-white/10 text-slate-300 font-mono">
-            ⚙️ <span id="server-status-pill">本地离线</span>
+            ⚙️ <span id="server-status-pill">未连接服务器</span>
         </button>
     </header>
 
@@ -82,9 +82,10 @@
             <!-- AI 每日寄语 -->
             <div id="ai-banner" class="hidden glass-card p-3.5 border-emerald-500/30 text-xs text-slate-200 space-y-1">
                 <div class="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                    <span>⚡ AI 今日作战提醒：</span>
+                    <span id="ai-banner-title">⚡ AI 今日作战提醒：</span>
                 </div>
-                <div id="ai-banner-text" class="leading-relaxed"></div>
+                <div id="ai-banner-text" class="leading-relaxed whitespace-pre-line"></div>
+                <div id="ai-banner-hotlines" class="hidden space-y-1.5 pt-1"></div>
             </div>
 
             <!-- 今日焦点任务清单 -->
@@ -205,6 +206,16 @@
                     <div id="adv-res-g" class="text-xs text-blue-100 bg-blue-950/20 p-2.5 rounded-lg leading-relaxed"></div>
                 </div>
             </div>
+
+            <!-- 危机关怀卡片：命中自伤/轻生等表述时替代常规研判，热线可一键拨打 -->
+            <div id="advisor-crisis-card" class="hidden glass-card p-4 space-y-3 border-red-500/60">
+                <div class="flex items-center gap-2 text-red-400 text-xs font-bold">
+                    <span class="text-base">🆘</span>
+                    <span>生命关怀与心理援助防线已启动</span>
+                </div>
+                <div id="crisis-text" class="text-xs text-red-100 bg-red-950/40 p-3 rounded-lg leading-relaxed whitespace-pre-wrap"></div>
+                <div id="crisis-hotlines" class="space-y-1.5"></div>
+            </div>
         </div>
 
         <!-- TAB 5: 复盘雷达与档案 -->
@@ -218,6 +229,9 @@
             <div id="gaps-list-app" class="space-y-2">
                 <div class="py-4 text-center text-xs text-slate-500">正在探测缺口...</div>
             </div>
+
+            <!-- 周复盘结果（含需用户逐条确认的进度建议） -->
+            <div id="review-result-card" class="hidden glass-card p-4 space-y-3 border-emerald-500/40"></div>
 
             <!-- 个人愿景卡片 -->
             <div class="glass-card p-4 space-y-2">
@@ -258,7 +272,7 @@
     <div id="server-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
         <div class="glass-card w-full max-w-xs p-5 space-y-3 border-emerald-500/40">
             <h3 class="text-sm font-bold text-white">服务端连接配置</h3>
-            <p class="text-[11px] text-slate-400">输入局域网后端服务地址，与 AI 智能体编排服务实时联通：</p>
+            <p class="text-[11px] text-slate-400">本 App 必须连接后端才能使用，没有离线模式。请输入后端服务地址（http:// 仅限局域网/本机地址，公网请用 https://）：</p>
             <input type="text" id="api-base-input" class="w-full p-2 bg-black/60 border border-white/10 rounded text-xs font-mono" placeholder="http://192.168.1.5:8000">
             <div class="flex justify-end gap-2 pt-2">
                 <button onclick="closeServerConfigModal()" class="px-3 py-1.5 rounded text-xs text-slate-400">取消</button>
@@ -270,6 +284,62 @@
     <script>
         // 核心客户端通信与桥接
         let API_BASE = localStorage.getItem('LP_API_BASE') || '';
+
+        const MSG_NO_SERVER = '请先在右上角⚙️设置里填写后端地址';
+        const REQUEST_TIMEOUT_MS = 120000; // AI 调用可能较慢，给 2 分钟
+
+        // 转义要插入 innerHTML 的任何文本，防止标题等内容被当成 HTML 执行
+        function escapeHtml(value) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+            return String(value ?? '').replace(/[&<>"']/g, ch => map[ch]);
+        }
+
+        // 顶部状态胶囊：none 未设置 / pending 已设置未验证 / ok 请求成功 / fail 连不上
+        function setServerPill(state) {
+            const labels = { none: '未连接服务器', pending: '连接中…', ok: '已连接', fail: '连不上服务器' };
+            document.getElementById('server-status-pill').innerText = labels[state] || labels.none;
+        }
+
+        // http:// 只允许本机/私有网段/内网主机名；公网地址必须 https://
+        function isLocalOrPrivateHost(hostname) {
+            const h = hostname.toLowerCase();
+            if (h === 'localhost' || h === '[::1]') return true;
+            if (/^\[(fc|fd|fe80)/.test(h)) return true;
+            if (h.endsWith('.local') || h.endsWith('.lan')) return true;
+            const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+            if (m) {
+                const a = Number(m[1]), b = Number(m[2]);
+                return a === 10 || a === 127 || (a === 192 && b === 168) ||
+                       (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254) ||
+                       (a === 100 && b >= 64 && b <= 127); // 100.64/10：CGNAT / Tailscale
+            }
+            return !h.includes('.') && !h.includes(':'); // 单标签主机名，如 my-pc
+        }
+
+        // 校验并规范化后端地址；返回 { ok, value, error }
+        function normalizeApiBase(raw) {
+            const trimmed = String(raw || '').trim().replace(/\/+$/, '');
+            if (!/^https?:\/\//i.test(trimmed)) {
+                return { ok: false, error: '地址必须以 http:// 或 https:// 开头' };
+            }
+            let parsed;
+            try { parsed = new URL(trimmed); } catch (e) {
+                return { ok: false, error: '地址格式不正确' };
+            }
+            if (parsed.protocol === 'http:' && !isLocalOrPrivateHost(parsed.hostname)) {
+                return { ok: false, error: 'http:// 只能用于局域网或本机地址，公网地址请使用 https://' };
+            }
+            return { ok: true, value: trimmed };
+        }
+
+        // 从后端错误体里取出给用户看的文字。detail 可能是字符串，也可能是 {code, message}
+        function extractErrorMessage(body, status) {
+            const detail = body && body.detail;
+            if (typeof detail === 'string' && detail) return detail;
+            if (detail && typeof detail === 'object' && !Array.isArray(detail) && detail.message) return detail.message;
+            if (Array.isArray(detail)) return '提交的内容格式不正确';
+            return `服务器返回错误（HTTP ${status}）`;
+        }
 
         function triggerHaptic() {
             if (window.AndroidNative && window.AndroidNative.hapticFeedback) {
@@ -283,6 +353,44 @@
             } else {
                 alert(msg);
             }
+        }
+
+        // 危机拦截：不展示常规研判，改为关怀信息 + 可一键拨打的援助热线
+        const CRISIS_HOTLINES = [
+            { label: '全国希望24小时生命救助热线', dial: '4001619995', display: '400-161-9995' },
+            { label: '北京心理危机研究与干预中心', dial: '01082951332', display: '010-82951332' },
+            { label: '共青团青少年心理咨询援助热线', dial: '12355', display: '12355' }
+        ];
+
+        // 只打开拨号盘并填入号码，不会直接呼出
+        function dialHotline(number) {
+            triggerHaptic();
+            if (window.AndroidNative && window.AndroidNative.dialPhone) {
+                window.AndroidNative.dialPhone(number);
+            } else {
+                window.location.href = 'tel:' + number;
+            }
+        }
+
+        function renderAppCrisisCard(data) {
+            triggerHaptic();
+            document.getElementById('advisor-result-card').classList.add('hidden');
+            const card = document.getElementById('advisor-crisis-card');
+            card.classList.remove('hidden');
+            document.getElementById('crisis-text').innerText =
+                [data.reason, data.alternative].filter(Boolean).join('\n\n');
+            document.getElementById('crisis-hotlines').innerHTML = hotlinesHtml();
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 可一键拨打的援助热线按钮（危机场景共用）
+        function hotlinesHtml() {
+            return CRISIS_HOTLINES.map(h => `
+                <button onclick="dialHotline('${h.dial}')" class="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-black/50 border border-white/10 text-left">
+                    <span class="text-[11px] text-slate-300">${escapeHtml(h.label)}</span>
+                    <span class="text-[11px] font-bold text-[#00F5A0] font-mono whitespace-nowrap">${escapeHtml(h.display)}</span>
+                </button>`).join('')
+                + '<div class="text-[11px] text-red-300 px-1">情况紧急、有即时危险时，请立即拨打 <b>110 / 120</b>。</div>';
         }
 
         function switchTab(tabId) {
@@ -302,22 +410,47 @@
             if (tabId === 'profile') loadProfileAndGaps();
         }
 
+        // 统一请求入口。成功返回解析后的 JSON；失败时弹 toast 说明原因并返回 null（不会静默）。
         async function appFetch(endpoint, options = {}) {
-            const url = API_BASE ? `${API_BASE}${endpoint}` : endpoint;
-            options.headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-            try {
-                const res = await fetch(url, options);
-                return await res.json();
-            } catch (e) {
-                console.warn('API离线或降级中:', e);
+            if (!API_BASE) {
+                setServerPill('none');
+                showAppToast(MSG_NO_SERVER);
                 return null;
             }
+            options.headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+            let res;
+            try {
+                res = await fetch(`${API_BASE}${endpoint}`, { ...options, signal: controller.signal });
+            } catch (e) {
+                setServerPill('fail');
+                showAppToast(e && e.name === 'AbortError'
+                    ? '服务器响应超时，请稍后重试'
+                    : '连不上服务器：请确认后端已启动、手机与电脑在同一 Wi-Fi、地址填写正确');
+                return null;
+            } finally {
+                clearTimeout(timer);
+            }
+            setServerPill('ok'); // 拿到了 HTTP 响应，说明服务器是通的
+            let body = null;
+            try { body = await res.json(); } catch (e) { /* 响应体不是 JSON */ }
+            if (!res.ok) {
+                showAppToast(extractErrorMessage(body, res.status));
+                return null;
+            }
+            return body;
         }
 
         async function initApp() {
-            if (API_BASE) {
-                document.getElementById('server-status-pill').innerText = '已联网';
+            if (!API_BASE) {
+                setServerPill('none');
+                document.getElementById('home-tasks-list').innerHTML =
+                    '<div class="py-4 text-center text-xs text-slate-500">尚未设置后端地址。请点击右上角⚙️填写，本 App 必须连接后端才能使用。</div>';
+                showAppToast(MSG_NO_SERVER);
+                return;
             }
+            setServerPill('pending');
             loadHomeTasks();
         }
 
@@ -330,31 +463,49 @@
                 container.innerHTML = tasks.map(t => `
                     <div class="flex items-center justify-between p-2.5 rounded-lg bg-white/5 text-xs">
                         <div class="flex items-center gap-2">
-                            <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskDone(${t.id}, this.checked)" class="w-4 h-4 rounded accent-[#00F5A0]">
-                            <span class="${t.done ? 'line-through text-slate-500' : 'text-slate-100'}">${t.title}</span>
+                            <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskDone(${Number(t.id)}, this.checked, this)" class="w-4 h-4 rounded accent-[#00F5A0]">
+                            <span class="${t.done ? 'line-through text-slate-500' : 'text-slate-100'}">${escapeHtml(t.title)}</span>
                         </div>
-                        <span class="font-mono text-[10px] text-slate-400">${t.est_minutes}m</span>
+                        <span class="font-mono text-[10px] text-slate-400">${escapeHtml(t.est_minutes)}m</span>
                     </div>
                 `).join('');
             }
         }
 
-        async function toggleTaskDone(id, done) {
+        async function toggleTaskDone(id, done, checkboxEl) {
             triggerHaptic();
-            await appFetch(`/api/tasks/${id}`, {
+            const res = await appFetch(`/api/tasks/${id}`, {
                 method: 'PUT',
                 body: JSON.stringify({ done: done })
             });
+            if (res === null && checkboxEl) checkboxEl.checked = !done; // 没保存成功，勾选框还原
             loadHomeTasks();
         }
 
         async function triggerDailyPlan() {
+            if (!API_BASE) return showAppToast(MSG_NO_SERVER);
             triggerHaptic();
             showAppToast('AI 正在编排今日日程...');
             const res = await appFetch('/api/ai/daily-plan', { method: 'POST' });
-            if (res && res.tip) {
-                document.getElementById('ai-banner').classList.remove('hidden');
-                document.getElementById('ai-banner-text').innerText = res.tip;
+            if (!res) return; // appFetch 已经弹出了失败原因
+            const banner = document.getElementById('ai-banner');
+            const title = document.getElementById('ai-banner-title');
+            const text = document.getElementById('ai-banner-text');
+            if (res.is_crisis) {
+                // 危机拦截：不显示规划，直接展示关怀与求助信息，并提供可一键拨打的援助热线
+                title.innerText = '请先照顾好自己：';
+                text.innerText = [res.reason, res.alternative].filter(Boolean).join('\n\n');
+                const hot = document.getElementById('ai-banner-hotlines');
+                hot.innerHTML = hotlinesHtml();
+                hot.classList.remove('hidden');
+                banner.classList.remove('hidden');
+                return;
+            }
+            document.getElementById('ai-banner-hotlines').classList.add('hidden');
+            if (res.tip) {
+                title.innerText = '⚡ AI 今日作战提醒：';
+                text.innerText = res.tip;
+                banner.classList.remove('hidden');
             }
             loadHomeTasks();
         }
@@ -362,6 +513,7 @@
         async function submitAdvisorQ() {
             const q = document.getElementById('advisor-app-q').value.trim();
             if (!q) return showAppToast('请输入咨询问题');
+            if (!API_BASE) return showAppToast(MSG_NO_SERVER);
             triggerHaptic();
             showAppToast('AI 正在深度研判中...');
 
@@ -371,14 +523,108 @@
             });
 
             if (data) {
+                if (data.is_crisis) return renderAppCrisisCard(data);
+                document.getElementById('advisor-crisis-card').classList.add('hidden');
                 document.getElementById('advisor-result-card').classList.remove('hidden');
-                document.getElementById('adv-res-c').innerText = data.conclusion || '建议做';
+                document.getElementById('adv-res-c').innerText = data.conclusion || '--';
                 document.getElementById('adv-res-r').innerText = data.reason || '无';
                 document.getElementById('adv-res-p').innerText = '好处: ' + (data.pros || '无');
                 document.getElementById('adv-res-cons').innerText = '风险: ' + (data.cons_risks || '无');
                 document.getElementById('adv-res-alt').innerText = data.alternative || '无';
                 document.getElementById('adv-res-g').innerText = data.goal_relation || '无';
             }
+        }
+
+        // ---- 目标 / 记录 / 复盘（原文件里这几个函数被页面引用但从未定义，点击会抛 ReferenceError） ----
+        async function loadGoalsData() {
+            const box = document.getElementById('goals-list-container');
+            if (!API_BASE) { box.innerHTML = '<div class="py-6 text-center text-xs text-slate-500">' + escapeHtml(MSG_NO_SERVER) + '</div>'; return; }
+            const goals = await appFetch('/api/goals');
+            if (!goals) { box.innerHTML = '<div class="py-6 text-center text-xs text-slate-500">目标列表加载失败</div>'; return; }
+            if (goals.length === 0) { box.innerHTML = '<div class="py-6 text-center text-xs text-slate-500">暂无目标，请先在网页端创建</div>'; return; }
+            box.innerHTML = goals.map(g => `
+                <div class="glass-card p-3.5 space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-white">${escapeHtml(g.title)}</span>
+                        <span class="font-mono text-emerald-400">${escapeHtml(g.progress)}%</span>
+                    </div>
+                    <div class="h-1.5 rounded-full bg-white/10"><div class="h-1.5 rounded-full bg-[#00F5A0]" style="width:${Math.max(0, Math.min(100, Number(g.progress) || 0))}%"></div></div>
+                    <div class="text-[10px] text-slate-500 font-mono">${escapeHtml(g.level)} · ${escapeHtml(g.status)}</div>
+                </div>`).join('');
+        }
+
+        function openNewGoalModal() {
+            showAppToast('新建目标请在电脑或手机浏览器打开后端网页完成');
+        }
+
+        async function submitLogForm() {
+            if (!API_BASE) return showAppToast(MSG_NO_SERVER);
+            const val = id => document.getElementById(id).value.trim();
+            const payload = {
+                done_items: val('log-app-done') || null,
+                study_minutes: parseInt(val('log-app-study'), 10) || 0,
+                study_note: val('log-app-study-note') || null,
+                meals: { breakfast: val('log-app-bf'), lunch: val('log-app-lu'), dinner: val('log-app-di'), snack: val('log-app-sn') },
+                sleep_start: val('log-app-sleep-s') || null,
+                sleep_end: val('log-app-sleep-e') || null
+            };
+            triggerHaptic();
+            const res = await appFetch('/api/logs', { method: 'POST', body: JSON.stringify(payload) });
+            if (res) showAppToast('今日记录已保存');
+        }
+
+        async function loadProfileAndGaps() {
+            const box = document.getElementById('gaps-list-app');
+            if (!API_BASE) { box.innerHTML = '<div class="py-4 text-center text-xs text-slate-500">' + escapeHtml(MSG_NO_SERVER) + '</div>'; return; }
+            const [gaps, profile] = await Promise.all([appFetch('/api/ai/gaps'), appFetch('/api/profile')]);
+            if (profile && profile.vision) document.getElementById('app-profile-vision').innerText = profile.vision;
+            if (!gaps) { box.innerHTML = '<div class="py-4 text-center text-xs text-slate-500">缺口检测加载失败</div>'; return; }
+            if (gaps.length === 0) { box.innerHTML = '<div class="py-4 text-center text-xs text-slate-500">暂未发现明显缺口</div>'; return; }
+            box.innerHTML = gaps.map(g => `
+                <div class="glass-card p-3 space-y-1">
+                    <div class="text-xs font-bold text-amber-400">${escapeHtml(g.level)} · ${escapeHtml(g.title)}</div>
+                    <div class="text-[11px] text-slate-300 leading-relaxed">${escapeHtml(g.detail)}</div>
+                </div>`).join('');
+        }
+
+        async function requestAppReview(type) {
+            if (!API_BASE) return showAppToast(MSG_NO_SERVER);
+            triggerHaptic();
+            showAppToast('AI 正在生成复盘...');
+            const res = await appFetch('/api/ai/review', { method: 'POST', body: JSON.stringify({ type: type }) });
+            if (!res) return;
+            const card = document.getElementById('review-result-card');
+            const labels = { summary: '总结', highlights: '亮点', deviations: '偏差', goal_progress: '目标推进',
+                             biggest_deviation: '最大偏差', tomorrow_adjustment: '明日调整', next_actions: '明日行动', next_week_strategy: '下周策略' };
+            let html = `<div class="text-xs font-bold text-emerald-400">${escapeHtml(res.title || (type === 'weekly' ? '周复盘' : '日复盘'))}</div>`;
+            if (res.is_crisis) {
+                html += `<div class="text-xs text-red-200 whitespace-pre-line leading-relaxed">${escapeHtml([res.reason, res.alternative].filter(Boolean).join('\n\n'))}</div>`;
+                html += hotlinesHtml();
+            } else {
+                Object.keys(labels).forEach(k => {
+                    if (res[k]) html += `<div><div class="text-[11px] font-bold text-slate-400">${labels[k]}</div><div class="text-xs text-slate-200 leading-relaxed whitespace-pre-line">${escapeHtml(res[k])}</div></div>`;
+                });
+                // 进度建议只展示；用户逐条点「确认写入」后才会调用后端写库
+                (res.progress_suggestions || []).forEach(s => {
+                    html += `<div class="p-2.5 rounded-lg bg-white/5 space-y-1.5">
+                        <div class="text-xs text-white">${escapeHtml(s.title)}：${escapeHtml(s.current_progress)}% → ${escapeHtml(s.suggested_progress)}%</div>
+                        <div class="text-[11px] text-slate-400">${escapeHtml(s.reason)}</div>
+                        <button onclick="confirmProgress(${Number(s.goal_id)}, ${Number(s.suggested_progress)}, this)" class="btn-neon px-2.5 py-1 rounded text-[11px]">确认写入</button>
+                    </div>`;
+                });
+            }
+            card.innerHTML = html;
+            card.classList.remove('hidden');
+        }
+
+        async function confirmProgress(goalId, progress, btn) {
+            const res = await appFetch('/api/goals/progress/apply', {
+                method: 'POST',
+                body: JSON.stringify({ items: [{ goal_id: goalId, progress: progress }] })
+            });
+            if (!res) return;
+            if (res.updated && res.updated.length) { btn.disabled = true; btn.innerText = '已写入'; }
+            else showAppToast((res.skipped && res.skipped[0] && res.skipped[0].reason) || '未能写入');
         }
 
         function openServerConfigModal() {
@@ -393,11 +639,20 @@
         }
 
         function saveServerConfig() {
-            API_BASE = document.getElementById('api-base-input').value.trim();
+            const raw = document.getElementById('api-base-input').value.trim();
+            if (raw === '') { // 留空 = 清除已保存的地址
+                API_BASE = '';
+                localStorage.removeItem('LP_API_BASE');
+                closeServerConfigModal();
+                initApp();
+                return;
+            }
+            const check = normalizeApiBase(raw);
+            if (!check.ok) return showAppToast(check.error); // 不保存，弹窗保持打开让用户改
+            API_BASE = check.value;
             localStorage.setItem('LP_API_BASE', API_BASE);
-            document.getElementById('server-status-pill').innerText = API_BASE ? '已连接' : '本地离线';
             closeServerConfigModal();
-            showAppToast('配置已更新');
+            showAppToast('后端地址已保存');
             initApp();
         }
 

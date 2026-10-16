@@ -159,6 +159,7 @@ class AIMessageOut(BaseModel):
     question: Optional[str] = None
     answer: str
     source: Optional[str] = "ai_model"
+    model_name: Optional[str] = None
     created_at: dt_datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -195,4 +196,17 @@ class ApplyBreakdownResponse(BaseModel):
     root_goal_id: Optional[int] = None
     created_stages: int = 0
     created_weekly: int = 0
+
+
+# --- 用户确认 AI 进度建议后的写入 ---
+class GoalProgressItem(BaseModel):
+    goal_id: int
+    progress: int = Field(ge=0, le=100)
+
+class GoalProgressApplyRequest(BaseModel):
+    items: List[GoalProgressItem] = Field(min_length=1, max_length=50)
+
+class GoalProgressApplyResponse(BaseModel):
+    updated: List[Dict[str, Any]] = Field(default_factory=list)   # {goal_id, progress, status}
+    skipped: List[Dict[str, Any]] = Field(default_factory=list)   # {goal_id, reason}
 

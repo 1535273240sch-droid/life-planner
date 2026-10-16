@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!--
+        为什么仍然允许明文 HTTP：
+        后端通常是局域网地址 http://192.168.x.x:8000，而 network-security-config
+        的 domain-config 只能写域名或单个 IP，不支持 CIDR / 通配网段，
+        无法把 192.168.0.0/16、10.0.0.0/8、172.16.0.0/12 逐个列举。
+        若把 base-config 设为 false，只放行 localhost / 10.0.2.2，真机连局域网后端会直接失败。
+
+        取舍：平台层保持允许明文，由 App 内页面（assets/www/index.html）在保存后端地址时强制：
+        http:// 只允许私有网段、本机和 .local / 单标签主机名，公网地址必须使用 https://。
+        同时只信任系统证书，不信任用户安装的 CA。
+    -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />

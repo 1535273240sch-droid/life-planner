@@ -1,47 +1,52 @@
-# 人生智能编排体 (Life Planner AI) - 原生安卓应用工程 (Native Android App)
+# 人生智能编排体 (Life Planner AI) - Android 工程
 
-本项目是「人生智能编排体」专为安卓手机打造的标准原生应用工程（Native Android Studio Project），包名：`com.lifeplanner.ai`。
+包名 `com.lifeplanner.ai`，当前版本 `1.1.0`（versionCode 2）。
 
----
+这是一个 WebView 套壳应用：APK 里只打包了一个移动端界面（`app/src/main/assets/www/index.html`），所有数据和 AI 功能都来自你自己运行的后端（仓库根目录的 FastAPI 服务）。
 
-## 📱 原生安卓应用特性
-
-1. **沉浸式真机体验**：
-   - 全屏无缝融入 OLED 纯黑 `#000000` 状态栏与手势导航；
-   - 原生触感：集成 `WebAppInterface.kt`，调用手机硬件震动马达提供按键与保存触觉反馈；
-   - 双击返回防误退与原生 Android Toast 提醒。
-
-2. **内置离线引擎 + 实时智能体联动**：
-   - 原生 APK 内置打包了全部移动端核心交互界面（`assets/www/index.html`），即便无网络状态下也可直接离线秒开；
-   - 支持在手机端右上角【⚙️ 服务设置】输入后端局域网地址（如 `http://192.168.x.x:8000`），即可与后端的 FastAPI 和 AI 大模型决策大脑实时打通！
+**必须在 App 右上角 ⚙️ 里填写后端地址才能使用，没有离线模式。** 没填地址或连不上时，界面会弹出提示，而不是显示空白或假数据。
 
 ---
 
-## 🚀 编译与打包生成 APK
+## 工作方式
 
-### 方式一：使用 Android Studio 一键打包（最推荐，简单快捷）
-1. 下载并启动 [Android Studio](https://developer.android.google.cn/studio)；
-2. 选择 **Open**，直接打开本目录：`e:\人生智能规划\android`；
-3. 等待 Gradle 自动完成依赖同步（Sync）；
-4. 点击顶部菜单栏：
-   👉 **Build -> Build Bundle(s) / APK(s) -> Build APK(s)**；
-5. 构建完成后，右下角会弹出提示，点击 **locate** 即可直接找到生成的 `app-debug.apk`！
-6. 将 `app-debug.apk` 通过微信/QQ或USB数据线发送到手机，点击即可直接安装运行！
+- 页面通过 `androidx.webkit.WebViewAssetLoader` 加载，地址为 `https://appassets.androidplatform.net/assets/www/index.html`。WebView 已关闭 `file://` 相关的跨源权限（`allowFileAccess`、`allowFileAccessFromFileURLs`、`allowUniversalAccessFromFileURLs`、`allowContentAccess` 均为 false）。
+- 页面用 `fetch` 请求你填写的后端地址。后端已启用 CORS，所以该 https 源可以跨域访问局域网后端。
+- 后端地址格式：`http://192.168.x.x:8000` 或 `https://你的域名`。以 `http://` 或 `https://` 开头，末尾斜杠会自动去掉。`http://` 仅允许本机和局域网地址，公网地址必须用 `https://`。
+- 手机必须能访问到电脑：同一 Wi-Fi，且电脑防火墙放行端口 8000。
 
-### 方式二：使用 Gradle 命令行构建
-在配置了 JDK 17+ 的环境下，直接在当前目录执行：
+## 安全说明（请读）
+
+- 后端 `start.py` 监听 `0.0.0.0` 且没有登录保护。同一 Wi-Fi 下的任何人都能读写你的全部数据（含健康信息）。只在可信网络使用。
+- 局域网后端是明文 `http://`，同一网络里的人理论上可以嗅探到流量。Android 的 `network-security-config` 无法按网段（CIDR）放行明文，局域网 IP 又无法逐个列举，所以本工程保留了对明文的放行，并由页面代码限制 `http://` 只能连私有/本机地址。想要更强的保护，请给后端加 HTTPS（例如放在反向代理后面）。
+- `allowBackup` 已关闭，应用数据不会被 `adb backup` 导出。
+- 配置了 AI Key 后，健康数据会被后端发给你所配置的模型服务商，详见仓库根目录 `README.md` 的隐私声明。
+
+---
+
+## 构建 APK
+
+本仓库**没有提交** `gradle-wrapper.jar` 与 `gradlew` / `gradlew.bat`。工程按 JDK 17、Gradle 8.4、AGP 8.2.2 配置。
+
+### 方式一：Android Studio
+1. 用 Android Studio 打开本目录（`android/`）。
+2. 等待 Gradle Sync 完成。
+3. 菜单 Build -> Build Bundle(s) / APK(s) -> Build APK(s)。
+4. 产物：`app/build/outputs/apk/debug/app-debug.apk`。
+
+### 方式二：命令行
+安装 JDK 17、Android SDK 和 Gradle 8.4 后，在本目录运行 `build_apk.bat`。脚本会依次尝试 `gradlew.bat` 和全局 `gradle`，都没有时会打印下一步该怎么做。
+
+想生成 wrapper，可在已安装 Gradle 的机器上运行：
 ```bash
-./build_apk.bat
-# 或
-./gradlew assembleDebug
+gradle wrapper --gradle-version 8.4
 ```
-生成的 APK 文件位于：
-`android/app/build/outputs/apk/debug/app-debug.apk`
 
----
+### 方式三：GitHub Actions
+`.github/workflows/android-apk-build.yml` 会用 Gradle 8.4 执行 `gradle assembleDebug` 并上传 APK。
 
-## 📲 USB 真机直接调试与安装
-1. 安卓手机打开【设置 -> 关于手机 -> 连续点击“版本号”7次】开启开发者选项；
-2. 进入【开发者选项】，开启【USB调试】；
-3. 用数据线将手机连接电脑；
-4. 在 Android Studio 中点击右上角绿色的 **Run 'app'** 按钮（或执行 `adb install -r app/build/outputs/apk/debug/app-debug.apk`），软件将直接自动安装并启动在您的手机上！
+## 安装到手机
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+需要在手机上开启开发者选项和 USB 调试。

@@ -48,4 +48,5 @@ jobs:
         with:
           files: |
             android/app/build/outputs/apk/debug/*.apk
-          generate_release_notes: true
+          # 说明用仓库内的中文发布日志，而不是自动生成的英文提交列表
+          body_path: RELEASE_NOTES.md

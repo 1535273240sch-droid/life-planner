@@ -56,7 +56,11 @@ def main():
     print("  【📱 手机端秒变独立全屏原生 App 指南】")
     print("  • 苹果 iOS (Safari):  打开手机地址 -> 底部分享按钮 ->「添加到主屏幕」")
     print("  • 安卓 (Chrome/微信): 打开手机地址 -> 菜单「添加到主屏幕」或「安装应用」")
-    print("  • 体验特点: 独立图标、无浏览器地址栏、全屏原生 OLED 级质感、离线响应")
+    print("  • 体验特点: 独立图标、无浏览器地址栏、全屏显示")
+    print("-" * 68)
+    if not (settings.AI_API_KEY or "").strip():
+        print("  ⚠️ 未配置 AI_API_KEY：AI 功能将报错，其余功能正常")
+    print("  ⚠️ 本服务无登录保护，请仅在可信 Wi-Fi 下使用")
     print(border + "\n")
 
     # 自动打开电脑浏览器访问

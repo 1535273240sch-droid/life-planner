@@ -266,23 +266,30 @@
                 return;
             }
 
-            container.innerHTML = skills.map(s => `
+            window.SKILLS_CACHE = {};
+            skills.forEach(s => { window.SKILLS_CACHE[s.id] = s; });
+            const esc = LifePlanner.escapeHtml;
+
+            container.innerHTML = skills.map(s => {
+                const lvl = Math.max(0, Math.min(10, parseInt(s.level, 10) || 0));
+                return `
                 <div class="glass-card-interactive p-4 relative group">
                     <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs px-2 py-0.5 rounded bg-white/5 text-slate-300 font-mono">${s.category || '通用'}</span>
+                        <span class="text-xs px-2 py-0.5 rounded bg-white/5 text-slate-300 font-mono">${esc(s.category || '通用')}</span>
                         <div class="flex items-center gap-1.5">
-                            <span class="text-xs font-bold text-[#00F5A0] font-mono">${s.level}/10 分</span>
-                            <button onclick="editSkill(${JSON.stringify(s).replace(/"/g, '&quot;')})" class="text-slate-400 hover:text-white p-1 text-xs">✎</button>
-                            <button onclick="deleteSkill(${s.id})" class="text-slate-400 hover:text-red-400 p-1 text-xs">✕</button>
+                            <span class="text-xs font-bold text-[#00F5A0] font-mono">${lvl}/10 分</span>
+                            <button onclick="editSkillById(${parseInt(s.id, 10)})" aria-label="编辑技能" class="text-slate-400 hover:text-white p-1 text-xs">✎</button>
+                            <button onclick="deleteSkill(${parseInt(s.id, 10)})" aria-label="删除技能" class="text-slate-400 hover:text-red-400 p-1 text-xs">✕</button>
                         </div>
                     </div>
-                    <div class="font-semibold text-sm text-white">${s.name}</div>
+                    <div class="font-semibold text-sm text-white">${esc(s.name)}</div>
                     <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2.5">
-                        <div class="bg-gradient-to-r from-emerald-500 to-[#00F5A0] h-full rounded-full" style="width: ${s.level * 10}%"></div>
+                        <div class="bg-gradient-to-r from-emerald-500 to-[#00F5A0] h-full rounded-full" style="width: ${lvl * 10}%"></div>
                     </div>
-                    ${s.note ? `<div class="text-[11px] text-slate-400 mt-2 truncate">${s.note}</div>` : ''}
+                    ${s.note ? `<div class="text-[11px] text-slate-400 mt-2 truncate">${esc(s.note)}</div>` : ''}
                 </div>
-            `).join('');
+                `;
+            }).join('');
         } catch (e) {
             console.error(e);
         }
@@ -317,6 +324,11 @@
 
     function editSkill(skill) {
         openSkillModal(skill);
+    }
+
+    function editSkillById(id) {
+        const s = window.SKILLS_CACHE && window.SKILLS_CACHE[id];
+        if (s) openSkillModal(s);
     }
 
     async function submitSkill() {
