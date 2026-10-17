@@ -132,6 +132,31 @@ fun ProfileScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
             Spacer(Modifier.height(LpSpacing.md))
         }
 
+        // 建档访谈入口：档案是 AI 编排的底座，访谈是最省力的填写方式。
+        LpCard(onClick = { onNavigate(NavTarget.INTERVIEW) }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "AI 访谈建档",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = LpColors.TextPrimary,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = "不想逐项填？聊 3 分钟，自动整理成档案与目标。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LpColors.TextMuted,
+                    )
+                }
+                Text(
+                    text = "→",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = LpColors.Accent,
+                )
+            }
+        }
+        Spacer(Modifier.height(LpSpacing.md))
+
         // ---- 基础信息 ----
         LpSectionTitle("基础信息")
         Spacer(Modifier.height(LpSpacing.sm))

@@ -1,100 +1,80 @@
 <!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
-:root{--bg:#07080C;--surface:#12141C;--hi:#191D28;--var:#222838;--border:rgba(255,255,255,.10);
---accent:#8B7BFF;--teal:#2DD4BF;--pos:#34D399;--warn:#FBBF24;--danger:#FB7185;--info:#60A5FA;
---t1:#F5F7FB;--t2:#C3C9D9;--t3:#8A93A8}
-body{width:390px;height:844px;background:var(--bg);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--t1);overflow:hidden;position:relative}
-.glow{position:absolute;border-radius:50%;filter:blur(60px);pointer-events:none}
-.g1{width:320px;height:320px;top:-140px;left:-90px;background:rgba(124,92,255,.30)}
-.g2{width:300px;height:300px;top:220px;right:-140px;background:rgba(34,211,238,.14)}
-.g3{width:260px;height:260px;bottom:-120px;left:-60px;background:rgba(139,123,255,.12)}
-.screen{position:relative;height:100%;overflow:hidden;padding:22px 20px 96px}
-.head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px}
-.hi{font-size:13px;color:var(--t3);letter-spacing:.3px}
-.h1{font-size:28px;font-weight:800;letter-spacing:-.3px;margin-top:2px}
-.actions{display:flex;gap:10px}
-.iconbtn{width:40px;height:40px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:15px}
-.hero{position:relative;border-radius:22px;padding:1px;background:linear-gradient(135deg,rgba(139,123,255,.75),rgba(45,212,191,.45) 60%,rgba(139,123,255,.25));margin-bottom:16px;box-shadow:0 10px 30px rgba(109,92,255,.16)}
-.heroin{border-radius:21px;background:linear-gradient(160deg,rgba(139,123,255,.20),rgba(18,20,28,.94) 55%,rgba(45,212,191,.10));padding:16px;display:flex;align-items:center;gap:12px}
-.spark{width:38px;height:38px;border-radius:13px;background:linear-gradient(135deg,#8B7BFF,#2DD4BF);display:flex;align-items:center;justify-content:center;font-size:18px;flex:0 0 auto;box-shadow:0 4px 14px rgba(139,123,255,.4)}
-.hero .txt{flex:1}
-.hero .t1x{font-size:15.5px;font-weight:700;letter-spacing:.2px}
-.hero .t2x{font-size:12px;color:var(--t3);margin-top:4px}
-.send{width:40px;height:40px;border-radius:14px;background:linear-gradient(135deg,#8B7BFF,#2DD4BF);display:flex;align-items:center;justify-content:center;font-size:16px;color:#07080C;font-weight:900;flex:0 0 auto}
-.quote{border-radius:20px;background:var(--surface);border:1px solid var(--border);padding:15px 16px;margin-bottom:16px}
-.qtop{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.qlabel{font-size:11px;letter-spacing:1px;color:var(--accent);font-weight:700}
-.qdate{font-size:11px;color:var(--t3)}
-.qtext{font-size:14.5px;line-height:1.55;color:var(--t1);font-weight:500}
-.qauthor{font-size:11.5px;color:var(--t3);margin-top:6px;text-align:right}
-.tips{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:9px}
-.tip{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.45;color:var(--t2)}
-.tag{flex:0 0 auto;font-size:10px;padding:2px 6px;border-radius:6px;margin-top:1px;font-weight:700}
-.tag.life{color:var(--pos);background:rgba(52,211,153,.12)}
-.tag.study{color:var(--info);background:rgba(96,165,250,.12)}
-.tag.work{color:var(--warn);background:rgba(251,191,36,.12)}
-.stats{display:flex;gap:10px;margin-bottom:18px}
-.stat{flex:1;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid var(--border);padding:11px 12px}
-.stat .num{font-size:21px;font-weight:800;letter-spacing:-.5px}
-.stat .num span{font-size:11px;font-weight:600;margin-left:2px;opacity:.75}
-.stat .lab{font-size:10.5px;color:var(--t3);margin-top:2px}
-.sec{display:flex;justify-content:space-between;align-items:center;margin:0 2px 9px}
-.sech{font-size:16px;font-weight:700}
+:root{--bg:#121110;--surface:#1B1917;--hi:#24211E;--var:#2C2824;--border:rgba(255,255,255,.12);
+--accent:#D98E63;--accent2:#C4764B;--sage:#8FAE8B;--pos:#9DBF9E;--warn:#D9A441;--info:#8FA8B8;
+--t1:#F3EDE4;--t2:#C9C0B4;--t3:#948B80}
+body{width:390px;height:844px;background:linear-gradient(180deg,#141210,#121110);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--t1);overflow:hidden}
+.screen{height:100%;overflow:hidden;padding:22px 20px 0}
+.head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+.date{font-size:11px;letter-spacing:.4px;color:var(--t3)}
+.h1{font-size:27px;font-weight:600;letter-spacing:-.2px;margin-top:5px}
+.actions{display:flex;gap:4px}
+.iconbtn{width:40px;height:40px;border-radius:20px;display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:16px}
+.card{border-radius:16px;background:var(--surface);border:1px solid var(--border);padding:16px;margin-bottom:12px}
+.card.tap{display:flex;flex-direction:column}
+.ct{font-size:15.5px;font-weight:500}
+.cs{font-size:12.5px;line-height:1.55;color:var(--t2);margin-top:6px}
+.cta{display:flex;justify-content:space-between;align-items:center;margin-top:12px;color:var(--accent);font-size:15px;font-weight:500}
+.askbar{border-radius:14px;background:var(--surface);border:1px solid var(--border);padding:12px 10px 12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.askbar .tx{flex:1}
+.askbar .p{font-size:15px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.askbar .h{font-size:11px;color:var(--t3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plus{width:34px;height:34px;border-radius:17px;background:rgba(217,142,99,.14);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:20px}
+.stats{display:flex;align-items:center;padding:2px 0 18px}
+.stat{flex:1}
+.stat .num{font-size:18px;font-weight:600}
+.stat .num span{font-size:11px;color:var(--t3);font-weight:400;margin-left:3px}
+.stat .lab{font-size:11px;color:var(--t3);margin-top:3px}
+.vd{width:1px;height:26px;background:var(--border);margin:0 8px}
+.sec{display:flex;align-items:center;justify-content:space-between;margin:0 2px 10px}
+.sech{font-size:18px;font-weight:600}
 .secm{font-size:11.5px;color:var(--t3)}
-.tasks{border-radius:20px;background:var(--surface);border:1px solid var(--border);padding:6px 16px;margin-bottom:16px}
-.task{display:flex;align-items:center;gap:11px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tasks{border-radius:16px;background:var(--surface);border:1px solid var(--border);padding:8px 16px;margin-bottom:16px}
+.task{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.06)}
 .task:last-child{border-bottom:0}
-.cb{width:21px;height:21px;border-radius:7px;border:1.6px solid rgba(255,255,255,.25);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#07080C}
-.cb.on{background:linear-gradient(135deg,#8B7BFF,#2DD4BF);border-color:transparent;font-weight:900}
+.cb{width:20px;height:20px;border-radius:6px;border:1.5px solid rgba(255,255,255,.22);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:11px;color:#121110}
+.cb.on{background:var(--accent);border-color:transparent;font-weight:800}
 .tk{flex:1}
-.tk .tt{font-size:13.5px;line-height:1.35}
+.tk .tt{font-size:14px;line-height:1.35}
 .tk .tt.done{color:var(--t3);text-decoration:line-through}
 .tk .tm{font-size:10.5px;color:var(--t3);margin-top:3px}
-.pill{font-size:10px;color:var(--pos);background:rgba(52,211,153,.12);padding:2px 7px;border-radius:6px;font-weight:700}
-.plan{border-radius:20px;border:1px solid rgba(139,123,255,.35);background:linear-gradient(160deg,rgba(139,123,255,.16),rgba(18,20,28,.9));padding:15px 16px;display:flex;align-items:center;gap:12px;margin-bottom:14px}
-.plan .ic{width:36px;height:36px;border-radius:12px;background:rgba(139,123,255,.18);display:flex;align-items:center;justify-content:center;font-size:16px}
-.plan .pt{flex:1;font-size:13.5px;font-weight:600;line-height:1.4}
-.plan .ps{font-size:11px;color:var(--t3);font-weight:400;margin-top:3px}
-.chev{color:var(--t3);font-size:16px}
-.nav{position:absolute;left:16px;right:16px;bottom:12px;height:64px;border-radius:28px;background:rgba(25,29,40,.92);border:1px solid rgba(255,255,255,.10);display:flex;align-items:center;justify-content:space-around;backdrop-filter:blur(18px);box-shadow:0 12px 40px rgba(0,0,0,.55)}
-.nav .it{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--t3);font-size:9.5px;width:52px}
-.nav .it .i{font-size:17px}
-.nav .it.sel{color:var(--t1)}
-.nav .selpill{position:absolute;width:52px;height:44px;border-radius:16px;background:linear-gradient(135deg,rgba(139,123,255,.28),rgba(45,212,191,.16));border:1px solid rgba(139,123,255,.35)}
+.pill{font-size:10px;color:var(--pos);background:rgba(157,191,158,.12);padding:2px 7px;border-radius:6px}
+.nav{position:absolute;left:0;right:0;bottom:0;background:var(--hi);border-top:1px solid var(--border);padding-bottom:18px}
+.nav .row{display:flex;height:58px;align-items:center}
+.nav .it{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--t3);font-size:11px}
+.nav .it .i{font-size:18px}
+.nav .it.sel{color:var(--accent)}
 </style></head><body>
-<div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div>
 <div class="screen">
   <div class="head">
-    <div><div class="hi">10 月 17 日 · 周五</div><div class="h1">晚上好</div></div>
+    <div><div class="date">10 月 17 日 · 周五</div><div class="h1">晚上好</div></div>
     <div class="actions"><div class="iconbtn">◍</div><div class="iconbtn">⚙</div></div>
   </div>
-  <div class="hero"><div class="heroin">
-    <div class="spark">✦</div>
-    <div class="txt"><div class="t1x">说一句话，AI 帮你整理今天</div><div class="t2x">记录 · 任务 · 目标，自动归类</div></div>
-    <div class="send">➤</div>
-  </div></div>
-  <div class="quote">
-    <div class="qtop"><div class="qlabel">今 日 一 句</div><div class="qdate">10/17</div></div>
-    <div class="qtext">星光不问赶路人，时光不负有心人。</div>
-    <div class="qauthor">— 佚名</div>
-    <div class="tips">
-      <div class="tip"><span class="tag life">生活</span><span>今晚睡前把手机放到床头够不到的地方，入睡会快很多。</span></div>
-      <div class="tip"><span class="tag study">学习</span><span>学完立刻用自己的话复述一遍，记忆会翻倍。</span></div>
-      <div class="tip"><span class="tag work">工作</span><span>下班前 5 分钟，列出明天的第一件事。</span></div>
-    </div>
+  <div class="card tap">
+    <div class="ct">先认识一下你</div>
+    <div class="cs">AI 会问你年龄、工作、收入、现在的生活和想成为的样子，最后整理成档案与目标。</div>
+    <div class="cta"><span>开始访谈</span><span>→</span></div>
   </div>
+  <div class="askbar"><div class="tx"><div class="p">记一句今天，或说说接下来想做什么…</div><div class="h">整理成记录、任务或目标，确认后才保存</div></div><div class="plus">＋</div></div>
   <div class="stats">
-    <div class="stat"><div class="num">12<span>天</span></div><div class="lab">连续记录</div></div>
-    <div class="stat"><div class="num">78<span>%</span></div><div class="lab">本周完成率</div></div>
+    <div class="stat"><div class="num">12<span>天</span></div><div class="lab">连续记录</div></div><div class="vd"></div>
+    <div class="stat"><div class="num">78<span>%</span></div><div class="lab">完成率</div></div><div class="vd"></div>
     <div class="stat"><div class="num">3<span>项</span></div><div class="lab">今日任务</div></div>
   </div>
-  <div class="sec"><div class="sech">今日任务</div><div class="secm">1/3 完成</div></div>
+  <div class="sec"><div class="sech">今日任务</div><div class="secm">1 / 3 完成</div></div>
   <div class="tasks">
     <div class="task"><div class="cb on">✓</div><div class="tk"><div class="tt done">晨间英语听力 25 分钟</div><div class="tm">预计 25 分钟 · 英语提升</div></div><div class="pill">已完成</div></div>
     <div class="task"><div class="cb"></div><div class="tk"><div class="tt">论文初稿：完成方法章节</div><div class="tm">预计 90 分钟 · 毕业论文</div></div></div>
     <div class="task"><div class="cb"></div><div class="tk"><div class="tt">晚间跑步 3 公里</div><div class="tm">预计 30 分钟 · 健康计划</div></div></div>
   </div>
-  <div class="plan"><div class="ic">✦</div><div class="pt">AI 生成今日计划<div class="ps">结合睡眠与近 7 天节奏，给出 3 个核心任务</div></div><div class="chev">›</div></div>
-  <div class="nav"><div class="selpill" style="left:8px"></div><div class="it sel"><div class="i">◉</div><div>总览</div></div><div class="it "><div class="i">◈</div><div>目标</div></div><div class="it "><div class="i">✎</div><div>记录</div></div><div class="it "><div class="i">✦</div><div>顾问</div></div><div class="it "><div class="i">◔</div><div>复盘</div></div></div>
+  <div class="sec"><div class="sech">今日一句</div></div>
+  <div class="card"><div style="font-size:15px;line-height:1.55">星光不问赶路人，时光不负有心人。</div><div style="font-size:11px;color:var(--t3);margin-top:6px">—— 佚名</div></div>
+  <div class="nav"><div class="row">
+    <div class="it sel"><div class="i">◉</div><div>总览</div></div>
+    <div class="it"><div class="i">◈</div><div>目标</div></div>
+    <div class="it"><div class="i">✎</div><div>记录</div></div>
+    <div class="it"><div class="i">◇</div><div>顾问</div></div>
+    <div class="it"><div class="i">◔</div><div>复盘</div></div>
+  </div></div>
 </div></body></html>

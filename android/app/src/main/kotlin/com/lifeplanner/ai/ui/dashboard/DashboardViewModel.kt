@@ -11,6 +11,7 @@ import com.lifeplanner.core.ai.DailyPlanResult
 import com.lifeplanner.core.daily.DailyQuote
 import com.lifeplanner.core.daily.DailyQuotes
 import com.lifeplanner.core.model.LifeGap
+import com.lifeplanner.core.model.Profile
 import com.lifeplanner.core.model.StatsOverview
 import com.lifeplanner.core.model.StatsTrends
 import com.lifeplanner.core.model.Task
@@ -51,6 +52,10 @@ data class DashboardUiState(
     val greeting: String = "",
     val dateLabel: String = "",
     val quote: DailyQuote? = null,
+    /** 档案里还没有年龄/职业/愿景：首页显示"先认识你"的访谈入口。 */
+    val interviewNeeded: Boolean = false,
+    /** 一句话档案摘要（28 岁 · 产品经理 · 月薪 1.2 万），用于访谈卡副标题。 */
+    val profileSummary: String = "",
     // ---- AI 一句话整理：草稿先展示，用户勾选确认后才落库 ----
     val captureOpen: Boolean = false,
     val captureInput: String = "",
@@ -113,8 +118,10 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
         if (hasData && loadedDate == today &&
             System.currentTimeMillis() - lastLoadedAtMs < CACHE_REUSE_MS
         ) {
-            // 数据属于今天且足够新：只刷新随时间变化的本本文案（问候语可能跨过整点），不重新取数。
+            // 数据属于今天且足够新：只刷新随时间变化的文案（问候语可能跨过整点），不重新取数。
             applyDateText(today)
+            // 访谈保存/档案编辑后回到首页时，缓存不能挡住"是否需要访谈"的状态更新。
+            refreshProfileInfo()
             return
         }
         // 已有内容时走静默刷新：保留旧内容，只在后台替换，避免闪屏。
@@ -160,7 +167,16 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
                     }
                     val trends = container.logService.trends(days, today)
                     val gaps = container.logService.detectGaps(today)
-                    DashboardSnapshot(overview, Dates.monthDay(today), tasks, trends, gaps)
+                    val profile = container.profileRepository.get()
+                    DashboardSnapshot(
+                        overview = overview,
+                        todayLabel = Dates.monthDay(today),
+                        tasks = tasks,
+                        trends = trends,
+                        gaps = gaps,
+                        interviewNeeded = profileNeedsInterview(profile),
+                        profileSummary = profileSummaryOf(profile),
+                    )
                 }
                 loadedDate = today
                 lastLoadedAtMs = System.currentTimeMillis()
@@ -179,6 +195,8 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
                         greeting = DailyQuotes.greeting(currentHour()),
                         dateLabel = DailyQuotes.dateLabel(today),
                         quote = DailyQuotes.forDate(today),
+                        interviewNeeded = snapshot.interviewNeeded,
+                        profileSummary = snapshot.profileSummary,
                     )
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -206,6 +224,42 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
                 quote = DailyQuotes.forDate(today),
             )
         }
+    }
+
+    /**
+     * 单独刷新档案摘要。
+     *
+     * 首页数据有 60s 缓存，但"是否已完成访谈"是会被其他页面写入的状态：
+     * 从访谈页/档案页返回时必须能立刻看到变化，所以缓存命中时也做一次轻量读取。
+     */
+    private fun refreshProfileInfo() {
+        viewModelScope.launch {
+            try {
+                val (needed, summary) = withContext(Dispatchers.IO) {
+                    val profile = container.profileRepository.get()
+                    profileNeedsInterview(profile) to profileSummaryOf(profile)
+                }
+                _state.update { it.copy(interviewNeeded = needed, profileSummary = summary) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 档案读取失败不该影响首页主体内容，保持旧值即可。
+            }
+        }
+    }
+
+    /** 愿景为空就还值得聊一次（访谈结束会写入 vision）；写过后就不在首页重复打扰。 */
+    private fun profileNeedsInterview(profile: Profile?): Boolean =
+        profile == null || profile.vision.isNullOrBlank()
+
+    /** "28 岁 · 产品经理 · 月薪 1.2 万"；缺什么就跳过什么，不显示空档。 */
+    private fun profileSummaryOf(profile: Profile?): String {
+        if (profile == null) return ""
+        val parts = ArrayList<String>(3)
+        profile.age?.let { parts += it.toString() + " 岁" }
+        profile.occupation?.takeIf { it.isNotBlank() }?.let { parts += it }
+        profile.healthInfo[KEY_INTERVIEW_INCOME]?.takeIf { it.isNotBlank() }?.let { parts += it }
+        return parts.joinToString(" · ")
     }
 
     /** 勾选 / 取消今日任务：完成后写入完成时间，取消时清空，然后刷新。 */
@@ -596,6 +650,8 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
         val tasks: List<DashboardTaskItem>,
         val trends: StatsTrends,
         val gaps: List<LifeGap>,
+        val interviewNeeded: Boolean,
+        val profileSummary: String,
     )
 
     companion object {
@@ -604,5 +660,8 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
 
         /** 当天数据在这段时间内视为新鲜：快速来回切页面时不重复取数。 */
         private const val CACHE_REUSE_MS = 60_000L
+
+        /** 访谈收入在 healthInfo 中的固定键（无 schema 迁移，随备份自动保存）。 */
+        private const val KEY_INTERVIEW_INCOME = "interview_income"
     }
 }

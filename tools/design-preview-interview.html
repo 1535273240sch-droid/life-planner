@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+:root{--bg:#121110;--surface:#1B1917;--hi:#24211E;--var:#2C2824;--border:rgba(255,255,255,.12);
+--accent:#D98E63;--t1:#F3EDE4;--t2:#C9C0B4;--t3:#948B80}
+body{width:390px;height:844px;background:linear-gradient(180deg,#141210,#121110);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--t1);overflow:hidden;display:flex;flex-direction:column}
+.header{padding:18px 16px 10px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
+.back{width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:20px}
+.ht{flex:1}
+.ht .t{font-size:18px;font-weight:600}
+.ht .s{font-size:11px;color:var(--t3);margin-top:2px}
+.restart{font-size:11.5px;color:var(--t3)}
+.progress{padding:10px 20px 0}
+.pline{display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-bottom:6px}
+.bar{height:3px;border-radius:2px;background:var(--var);overflow:hidden}
+.bar i{display:block;height:100%;width:43%;background:var(--accent)}
+.chat{flex:1;padding:16px 20px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.ai{align-self:flex-start;max-width:86%;background:var(--surface);border:1px solid var(--border);border-radius:14px 14px 14px 4px;padding:11px 13px;font-size:14px;line-height:1.55;color:var(--t1)}
+.ai .reply{color:var(--t2);font-size:13.5px;margin-bottom:7px}
+.ai .q{font-weight:500}
+.me{align-self:flex-end;max-width:80%;background:var(--var);border-radius:14px 14px 4px 14px;padding:11px 13px;font-size:14px;line-height:1.55;color:var(--t1)}
+.meta{align-self:center;font-size:10.5px;color:var(--t3);margin:2px 0}
+.inputbar{border-top:1px solid var(--border);padding:10px 16px 22px;display:flex;align-items:center;gap:10px;background:var(--bg)}
+.field{flex:1;background:var(--var);border:1px solid var(--border);border-radius:12px;padding:11px 13px;font-size:14px;color:var(--t3)}
+.send{width:40px;height:40px;border-radius:20px;background:var(--accent);color:#121110;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800}
+.skip{text-align:center;font-size:11.5px;color:var(--t3);padding:8px 0 0}
+</style></head><body>
+<div class="header"><div class="back">‹</div><div class="ht"><div class="t">认识你</div><div class="s">聊 3 分钟，AI 帮你整理成档案</div></div><div class="restart">重新开始</div></div>
+<div class="progress"><div class="pline"><span>已了解 3 / 7 个话题</span><span>慢慢来</span></div><div class="bar"><i></i></div></div>
+<div class="chat">
+  <div class="ai"><div class="q">先聊聊你现在吧。你做什么工作、在哪个行业，做多久了？</div></div>
+  <div class="me">我在互联网公司做产品经理，做了 6 年。</div>
+  <div class="ai"><div class="reply">产品经理做 6 年，日常应该要在很多人的需求之间做取舍，挺耗神的。</div><div class="q">收入方面大概是什么水平？不用精确，说个区间就好。</div></div>
+  <div class="me">月薪大概 3 万左右，年终奖看项目。</div>
+  <div class="ai"><div class="reply">记下了。这个收入在行业里算中上，但要看换来的时间成本。</div><div class="q">现在最让你觉得卡住、或者最想改变的是什么？</div></div>
+</div>
+<div class="inputbar"><div class="field">说你的真实情况就好…</div><div class="send">↑</div></div>
+<div class="skip">先跳过这个问题</div>
+</body></html>

@@ -45,6 +45,15 @@ object Prompts {
         lines += "- 饮食偏好与忌口: ${health["diet_pref"] ?: "无"} / 忌口: ${health["taboo"] ?: "无"}"
         lines += "- 已知疾病/过敏/风险: ${health["allergy_or_disease"] ?: "无特殊记录"}"
 
+        // 访谈补充（建档访谈写入 healthInfo 的固定键；没有就明确说没有）
+        val interview = profile?.healthInfo ?: emptyMap()
+        lines += "【访谈补充】"
+        lines += "- 收入水平: ${interview["interview_income"] ?: "未填"}"
+        lines += "- 当前生活状态与困扰: ${interview["interview_current_state"] ?: "未填"}"
+        lines += "- 想达到的状态: ${interview["interview_desired_state"] ?: "未填"}"
+        lines += "- 打算通过的方式: ${interview["interview_approach"] ?: "未填"}"
+        lines += "- 未来想成为的人: ${interview["interview_future_self"] ?: "未填"}"
+
         // 技能矩阵
         lines += "【现有技能水平 (1-10分)】"
         if (skills.isNotEmpty()) {

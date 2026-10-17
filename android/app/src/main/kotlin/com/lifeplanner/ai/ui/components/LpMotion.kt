@@ -38,31 +38,31 @@ import kotlinx.coroutines.delay
  */
 object LpMotion {
     /** 页面进入：260ms（与退出 160ms 形成「进慢出快」的方向感）。 */
-    const val PageEnterMs = 260
+    const val PageEnterMs = 210
 
     /** 页面退出/返回：160ms。 */
-    const val PageExitMs = 160
+    const val PageExitMs = 140
 
     /** 内容淡入（加载完成）：220ms，避免整屏 loading 闪烁。 */
-    const val ContentFadeMs = 220
+    const val ContentFadeMs = 180
 
     /** 选中指示器移动：220ms。 */
-    const val IndicatorMs = 220
+    const val IndicatorMs = 180
 
     /** 进度/统计数字滚动：600ms。 */
-    const val NumberMs = 600
+    const val NumberMs = 500
 
     /** 列表错峰步长：40ms。 */
-    const val StaggerStepMs = 40
+    const val StaggerStepMs = 30
 
     /** 最多参与错峰的条目数；再往后一次性显示，保证长列表不掉帧。 */
-    const val StaggerMaxIndex = 8
+    const val StaggerMaxIndex = 6
 
     /** 卡片按压缩放。 */
-    const val PressScale = 0.97f
+    const val PressScale = 0.98f
 
     /** 入场位移 16dp 对应的像素由调用方按 density 换算；这里只给 dp 语义。 */
-    const val EnterOffsetDp = 16
+    const val EnterOffsetDp = 8
 
     /** 界面主曲线：起步快、收尾稳，接近 Material 的 emphasized decelerate。 */
     val EaseOut: Easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)

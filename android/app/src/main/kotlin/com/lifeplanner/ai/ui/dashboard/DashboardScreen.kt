@@ -12,7 +12,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,7 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ButtonDefaults
@@ -71,7 +69,6 @@ import com.lifeplanner.ai.ui.components.LpDivider
 import com.lifeplanner.ai.ui.components.LpEmptyState
 import com.lifeplanner.ai.ui.components.LpErrorBanner
 import com.lifeplanner.ai.ui.components.LpGradientButton
-import com.lifeplanner.ai.ui.components.LpHeroCard
 import com.lifeplanner.ai.ui.components.LpLineChart
 import com.lifeplanner.ai.ui.components.LpLoading
 import com.lifeplanner.ai.ui.components.LpPrimaryButton
@@ -80,8 +77,6 @@ import com.lifeplanner.ai.ui.components.LpQuoteCard
 import com.lifeplanner.ai.ui.components.LpSectionHeader
 import com.lifeplanner.ai.ui.components.LpSpacing
 import com.lifeplanner.ai.ui.components.LpStatTile
-import com.lifeplanner.ai.ui.components.lpStaggerIn
-import com.lifeplanner.ai.ui.theme.LpGradients
 import com.lifeplanner.ai.ui.theme.LpColors
 import com.lifeplanner.core.ai.DailyPlanResult
 import com.lifeplanner.core.ai.PlannedTask
@@ -157,25 +152,21 @@ fun DashboardScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = PagePadding),
         ) {
-            StaggerSection(index = 0) {
-                GreetingHeader(state = state, onNavigate = onNavigate)
-            }
+            GreetingHeader(state = state, onNavigate = onNavigate)
 
             Spacer(Modifier.height(LpSpacing.lg))
 
-            // AI 一句话整理：首页第一入口
-            StaggerSection(index = 1) {
-                HeroSection(onOpenCapture = { vm.openCapture() })
+            // 建档访谈：只在档案还空着时出现，不重复打扰已经填过的人。
+            if (state.interviewNeeded) {
+                InterviewSection(
+                    summary = state.profileSummary,
+                    onStart = { onNavigate(NavTarget.INTERVIEW) },
+                )
+                Spacer(Modifier.height(LpSpacing.md))
             }
 
-            Spacer(Modifier.height(LpSpacing.md))
-
-            val quote = state.quote
-            if (quote != null) {
-                StaggerSection(index = 2) {
-                    QuoteSection(quote = quote)
-                }
-            }
+            // 一句话记录：这是首页最常用的动作，所以放在第一屏、且只占一行。
+            RecordSection(onOpenCapture = { vm.openCapture() })
 
             val error = state.error
             if (error != null) {
@@ -183,7 +174,7 @@ fun DashboardScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                 LpErrorBanner(message = error, onRetry = { vm.forceRefresh() })
             }
 
-            Spacer(Modifier.height(LpSpacing.xl))
+            Spacer(Modifier.height(LpSpacing.lg))
 
             val overview = state.overview
             if (overview == null) {
@@ -193,47 +184,43 @@ fun DashboardScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                     LpCard {
                         LpEmptyState(
                             title = "还没有今天的数据",
-                            subtitle = "先记录今天的状态，或让 AI 帮你整理一句话",
+                            subtitle = "先记一句今天做了什么，或去记录页填写",
                         )
                         LpPrimaryButton(text = "重试", onClick = { vm.forceRefresh() })
                     }
                 }
             } else {
-                StaggerSection(index = 3) {
-                    OverviewSection(overview = overview, tasks = state.tasks)
+                OverviewSection(overview = overview, tasks = state.tasks)
+
+                Spacer(Modifier.height(LpSpacing.section))
+                TasksSection(
+                    state = state,
+                    onToggle = { id, done -> vm.setTaskDone(id, done) },
+                    onNavigate = onNavigate,
+                )
+
+                val quote = state.quote
+                if (quote != null) {
+                    Spacer(Modifier.height(LpSpacing.section))
+                    QuoteSection(quote = quote)
                 }
 
                 Spacer(Modifier.height(LpSpacing.section))
-                StaggerSection(index = 4) {
-                    TasksSection(
-                        state = state,
-                        onToggle = { id, done -> vm.setTaskDone(id, done) },
-                        onNavigate = onNavigate,
-                    )
-                }
+                PlanSection(
+                    state = state,
+                    dialError = dialError,
+                    onGenerate = { vm.generateDailyPlan() },
+                    onToggle = { vm.togglePlannedTask(it) },
+                    onApply = { vm.applyPlannedTasks() },
+                    onNavigate = onNavigate,
+                    onDial = ::dial,
+                )
 
                 Spacer(Modifier.height(LpSpacing.section))
-                StaggerSection(index = 5) {
-                    PlanSection(
-                        state = state,
-                        dialError = dialError,
-                        onGenerate = { vm.generateDailyPlan() },
-                        onToggle = { vm.togglePlannedTask(it) },
-                        onApply = { vm.applyPlannedTasks() },
-                        onNavigate = onNavigate,
-                        onDial = ::dial,
-                    )
-                }
+                TrendSection(state = state, onSelect = { vm.setTrendDays(it) })
 
                 Spacer(Modifier.height(LpSpacing.section))
-                StaggerSection(index = 6) {
-                    TrendSection(state = state, onSelect = { vm.setTrendDays(it) })
-                }
-
-                Spacer(Modifier.height(LpSpacing.section))
-                StaggerSection(index = 7) {
-                    GapsSection(gaps = state.gaps)
-                }
+                GapsSection(gaps = state.gaps)
             }
 
             Spacer(Modifier.height(LpSpacing.xl))
@@ -275,6 +262,22 @@ private fun GreetingHeader(state: DashboardUiState, onNavigate: (NavTarget) -> U
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = state.dateLabel.ifBlank { "今天" },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LpColors.TextMuted,
+                )
+                if (state.refreshing) {
+                    Spacer(Modifier.width(LpSpacing.sm))
+                    Text(
+                        text = "同步中",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LpColors.TextMuted,
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = state.greeting.ifBlank { "你好" },
                 style = MaterialTheme.typography.displaySmall,
@@ -282,29 +285,13 @@ private fun GreetingHeader(state: DashboardUiState, onNavigate: (NavTarget) -> U
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = state.dateLabel.ifBlank { "今天" },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = LpColors.TextMuted,
-                )
-                if (state.refreshing) {
-                    Spacer(Modifier.width(LpSpacing.sm))
-                    Text(
-                        text = "刷新中…",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = LpColors.TextMuted,
-                    )
-                }
-            }
         }
         RoundIconButton(
             icon = Icons.Outlined.Person,
             description = "个人档案",
             onClick = { onNavigate(NavTarget.PROFILE) },
         )
-        Spacer(Modifier.width(LpSpacing.sm))
+        Spacer(Modifier.width(LpSpacing.xs))
         RoundIconButton(
             icon = Icons.Outlined.Settings,
             description = "设置",
@@ -313,7 +300,7 @@ private fun GreetingHeader(state: DashboardUiState, onNavigate: (NavTarget) -> U
     }
 }
 
-/** 圆形图标按钮：玻璃质感 + 40dp 触控区，首页头部专用。 */
+/** 圆形图标按钮：40dp 触控区，只在按下时给一点底色。 */
 @Composable
 private fun RoundIconButton(icon: ImageVector, description: String, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
@@ -321,9 +308,6 @@ private fun RoundIconButton(icon: ImageVector, description: String, onClick: () 
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(LpColors.SurfaceHigh.copy(alpha = 0.9f))
-            .background(LpGradients.Glass)
-            .border(1.dp, LpColors.Border, CircleShape)
             .clickable(
                 interactionSource = interaction,
                 indication = androidx.compose.foundation.LocalIndication.current,
@@ -335,53 +319,69 @@ private fun RoundIconButton(icon: ImageVector, description: String, onClick: () 
             imageVector = icon,
             contentDescription = description,
             tint = LpColors.TextSecondary,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(21.dp),
         )
     }
 }
 
 // ------------------------------------------------------------------
-// 2. AI 一句话整理入口（Hero）
+// 2. 建档访谈入口（只在档案为空时出现）
 // ------------------------------------------------------------------
 
 @Composable
-private fun HeroSection(onOpenCapture: () -> Unit) {
-    LpHeroCard {
+private fun InterviewSection(summary: String, onStart: () -> Unit) {
+    LpCard(onClick = onStart) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Outlined.AutoAwesome,
-                contentDescription = null,
-                tint = LpColors.Accent,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(LpSpacing.sm))
             Text(
-                text = "AI 一句话整理",
+                text = "先认识一下你",
                 style = MaterialTheme.typography.titleMedium,
                 color = LpColors.TextPrimary,
                 modifier = Modifier.weight(1f),
             )
-            LpBadge(text = "试试", color = LpColors.AccentAlt)
+            Text(
+                text = "约 8 个问题",
+                style = MaterialTheme.typography.labelSmall,
+                color = LpColors.TextMuted,
+            )
         }
-        Spacer(Modifier.height(LpSpacing.md))
+        Spacer(Modifier.height(6.dp))
         Text(
-            text = "说一句话，AI 帮你整理今天",
-            style = MaterialTheme.typography.titleLarge,
-            color = LpColors.TextPrimary,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "学习 · 睡眠 · 运动 · 任务 · 目标，一次说清",
+            text = if (summary.isBlank()) {
+                "AI 会问你年龄、工作、收入、现在的生活和想成为的样子，最后整理成档案与目标。"
+            } else {
+                "已了解：" + summary + "。再聊几句，把愿景和目标补完整。"
+            },
             style = MaterialTheme.typography.bodySmall,
             color = LpColors.TextSecondary,
         )
-        Spacer(Modifier.height(LpSpacing.lg))
-        LpAskBar(
-            placeholder = "今天学了 1 小时英语，晚上跑了 3 公里…",
-            hint = "只整理你真正说过的内容，确认后才保存",
-            onClick = onOpenCapture,
-        )
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "开始访谈",
+                style = MaterialTheme.typography.titleMedium,
+                color = LpColors.Accent,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "→",
+                style = MaterialTheme.typography.titleMedium,
+                color = LpColors.Accent,
+            )
+        }
     }
+}
+
+// ------------------------------------------------------------------
+// 3. 一句话记录入口（首页最常用的动作）
+// ------------------------------------------------------------------
+
+@Composable
+private fun RecordSection(onOpenCapture: () -> Unit) {
+    LpAskBar(
+        placeholder = "记一句今天，或说说接下来想做什么…",
+        hint = "整理成记录、任务或目标，确认后才保存",
+        onClick = onOpenCapture,
+    )
 }
 
 // ------------------------------------------------------------------
@@ -406,40 +406,51 @@ private fun QuoteSection(quote: DailyQuote) {
 // 4. 今日概览（三枚玻璃小卡）
 // ------------------------------------------------------------------
 
+/** 概览：一行三个数字 + 细分隔线，不再用三张卡把首屏压满。 */
 @Composable
 private fun OverviewSection(overview: StatsOverview, tasks: List<DashboardTaskItem>) {
     val total = tasks.size
     val done = tasks.count { it.task.done }
     val rate = if (total == 0) 0 else (done * 100) / total
 
-    LpSectionHeader(
-        title = "今日概览",
-        subtitle = "连续记录 · 完成率 · 今日任务",
-    )
-    Spacer(Modifier.height(LpSpacing.md))
-    Row(horizontalArrangement = Arrangement.spacedBy(LpSpacing.md)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         LpStatTile(
             label = "连续记录",
             value = overview.streak.toString(),
             unit = "天",
-            color = LpColors.Warning,
+            color = LpColors.TextPrimary,
             modifier = Modifier.weight(1f),
         )
+        StatDivider()
         LpStatTile(
             label = "完成率",
             value = if (total == 0) "—" else rate.toString(),
             unit = if (total == 0) "" else "%",
-            color = LpColors.Accent,
+            color = LpColors.TextPrimary,
             modifier = Modifier.weight(1f),
         )
+        StatDivider()
         LpStatTile(
             label = "今日任务",
             value = total.toString(),
             unit = "项",
-            color = LpColors.Info,
+            color = LpColors.TextPrimary,
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+@Composable
+private fun StatDivider() {
+    Box(
+        modifier = Modifier
+            .padding(horizontal = LpSpacing.sm)
+            .size(width = 1.dp, height = 26.dp)
+            .background(LpColors.Border),
+    )
 }
 
 // ------------------------------------------------------------------
@@ -479,7 +490,7 @@ private fun TasksSection(
         if (state.tasks.isEmpty()) {
             LpEmptyState(
                 title = "今天还没有任务",
-                subtitle = "可以让 AI 从一句话里整理，或去目标页建立目标。",
+                subtitle = "记一句今天做了什么，或去目标页建立目标。",
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -528,13 +539,13 @@ private fun PlanSection(
 ) {
     val busy = state.planLoading || state.planApplying
     LpSectionHeader(
-        title = "AI 今日计划",
-        subtitle = "生成后先确认，再写入今日任务",
+        title = "今日计划",
+        subtitle = "先看看，再决定加不加进今天",
     )
     Spacer(Modifier.height(LpSpacing.md))
     LpCard(modifier = Modifier.animateContentSize()) {
         LpGradientButton(
-            text = "AI 生成今日计划",
+            text = "生成今日计划",
             onClick = onGenerate,
             enabled = !busy,
             loading = state.planLoading,
@@ -701,20 +712,6 @@ private fun GapsSection(gaps: List<LifeGap>) {
 // ------------------------------------------------------------------
 // 共用小件
 // ------------------------------------------------------------------
-
-/**
- * 区块入场：用设计系统的 lpStaggerIn（前 8 项 40ms 错峰、220ms 淡入 + 轻微上移）。
- * 包一层 Column 是为了让「时间差」作用在整段区块上，而不是每个卡片各弹一次。
- */
-@Composable
-private fun StaggerSection(index: Int, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .lpStaggerIn(index),
-        content = content,
-    )
-}
 
 @Composable
 private fun NavActionButton(

@@ -1,17 +1,13 @@
 package com.lifeplanner.ai.ui
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,11 +19,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.EditNote
@@ -35,8 +29,10 @@ import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,13 +46,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -71,25 +64,24 @@ import com.lifeplanner.ai.ui.components.LpBackground
 import com.lifeplanner.ai.ui.components.LpMotion
 import com.lifeplanner.ai.ui.dashboard.DashboardScreen
 import com.lifeplanner.ai.ui.goals.GoalsScreen
+import com.lifeplanner.ai.ui.interview.InterviewScreen
 import com.lifeplanner.ai.ui.log.LogScreen
 import com.lifeplanner.ai.ui.profile.ProfileScreen
 import com.lifeplanner.ai.ui.review.ReviewScreen
 import com.lifeplanner.ai.ui.settings.SettingsScreen
 import com.lifeplanner.ai.ui.theme.LpColors
-import com.lifeplanner.ai.ui.theme.LpGradients
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * 应用根：极光背景 + NavHost + 悬浮胶囊底部导航。
+ * 应用根：背景 + NavHost + 底部导航。
  *
- * 页面统一签名：`XxxScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit)`。
- * 底部只放 5 个高频页面；档案与设置在各页顶栏进入。
- *
- * 导航壳负责三件事，页面自己不要再做：
- * 1. 状态栏/导航栏 insets —— Scaffold 在没有 TopAppBar 时会自动给内容补状态栏高度，
- *    所以首页（自带头部）不需要也不应该再加 statusBarsPadding()，否则双倍留白；
- * 2. 键盘让位 —— 根节点 imePadding()，底部胶囊随键盘上移，不遮挡输入框；
- * 3. 页面转场 —— fade + 16dp 上移，进入 260ms / 退出 160ms。
+ * 2.2 的关键变化：
+ * 1. 底部导航从"悬浮胶囊"改成贴着底部的整条栏（含导航栏 insets）。
+ *    悬浮胶囊在滚动页面里很容易让人误以为内容被盖住（截断感/重叠感），
+ *    整条栏是系统级的标准做法，内容边界更清楚。
+ * 2. 首页与访谈页不显示底部栏：首页自带头部；访谈是沉浸式对话，需要整屏。
+ * 3. 转场更短更轻（210ms 淡入 + 8dp 上移），只保留"页与页之间有过渡"，
+ *    不再做大幅位移与按压回弹。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +96,7 @@ fun LifePlannerRoot(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: NavTarget.DASHBOARD.route
     val currentTarget = NavTarget.values().firstOrNull { it.route == currentRoute } ?: NavTarget.DASHBOARD
+
     val bottomItems = remember {
         listOf(
             NavTarget.DASHBOARD,
@@ -113,6 +106,9 @@ fun LifePlannerRoot(
             NavTarget.REVIEW,
         )
     }
+
+    // 首页自带头部；访谈是沉浸式对话——两者都不显示顶栏与底栏。
+    val immersive = currentTarget == NavTarget.DASHBOARD || currentTarget == NavTarget.INTERVIEW
 
     fun navigate(target: NavTarget) {
         if (target.route == currentRoute) return
@@ -130,8 +126,7 @@ fun LifePlannerRoot(
     }
 
     // 通知点击路由：pending 非空时跳转，然后立刻 consume。
-    // 为什么 effect 只依赖 pendingRoute：consume 会把值清成 null，
-    // effect 以 null 重跑一次直接返回，因此配置变化/重组都不会重复导航。
+    // effect 只依赖 pendingRoute：consume 置 null 后重跑直接返回，重建时不会重复导航。
     val pendingRoute by pushRoutes.collectAsStateWithLifecycle()
     LaunchedEffect(pendingRoute) {
         val route = pendingRoute ?: return@LaunchedEffect
@@ -139,21 +134,18 @@ fun LifePlannerRoot(
         consumePushRoute()
     }
 
-    // 页面入场位移按屏幕密度换算，避免在 2x/3x 屏上「比 16dp 更大」
     val density = LocalDensity.current
     val enterOffsetPx = with(density) { LpMotion.EnterOffsetDp.dp.roundToPx() }
 
     LpBackground(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            // edge-to-edge 下窗口不会自动为输入法让位；不加这段时键盘会盖住底部胶囊，
-            // 用户点「总览/目标」实际点到的是键盘，看起来像卡在设置页。
+            // edge-to-edge 下窗口不会自动为输入法让位；不加这段时键盘会盖住输入框。
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding(),
-            containerColor = Color.Transparent,
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
             topBar = {
-                // 首页自带头部（问候 + 档案/设置圆钮），不再叠一个 TopAppBar
-                if (currentTarget != NavTarget.DASHBOARD) {
+                if (!immersive) {
                     TopAppBar(
                         title = {
                             Text(
@@ -163,7 +155,7 @@ fun LifePlannerRoot(
                             )
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
+                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
                         ),
                         actions = {
                             IconButton(onClick = { navigate(NavTarget.PROFILE) }) {
@@ -193,11 +185,13 @@ fun LifePlannerRoot(
                 }
             },
             bottomBar = {
-                LpFloatingBottomBar(
-                    items = bottomItems,
-                    selected = currentTarget,
-                    onSelect = { navigate(it) },
-                )
+                if (!immersive) {
+                    LpBottomBar(
+                        items = bottomItems,
+                        selected = currentTarget,
+                        onSelect = { navigate(it) },
+                    )
+                }
             },
         ) { padding ->
             Box(
@@ -231,109 +225,15 @@ fun LifePlannerRoot(
                     composable(NavTarget.REVIEW.route) { ReviewScreen(container, ::navigate) }
                     composable(NavTarget.PROFILE.route) { ProfileScreen(container, ::navigate) }
                     composable(NavTarget.SETTINGS.route) { SettingsScreen(container, ::navigate) }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 悬浮胶囊底部导航：左右 16dp、距底 12dp、高 64dp、圆角 28dp（DESIGN.md §4）。
- *
- * 选中指示器是一个独立色块，用 animateDpAsState 平移（220ms），
- * 而不是每个图标各自变色的「硬切」—— 后者在快速切换时会有闪烁感。
- */
-@Composable
-private fun LpFloatingBottomBar(
-    items: List<NavTarget>,
-    selected: NavTarget,
-    onSelect: (NavTarget) -> Unit,
-) {
-    val density = LocalDensity.current
-    // 键盘弹出时外层已经 imePadding() 让出了输入法高度，此时手势条被键盘盖住，
-    // 再叠一次导航栏高度会让胶囊凭空浮起一条空隙。
-    val imeVisible = WindowInsets.ime.getBottom(density) > 0
-    val navBarInset = if (imeVisible) {
-        0.dp
-    } else {
-        with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(top = 8.dp, bottom = navBarInset + 12.dp),
-    ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-                .clip(BarShape)
-                .background(LpColors.SurfaceHigh.copy(alpha = 0.92f))
-                .background(LpGradients.Glass)
-                .border(1.dp, LpColors.Border, BarShape)
-                .padding(6.dp),
-        ) {
-            val itemWidth = maxWidth / items.size
-            val selectedIndex = items.indexOf(selected).coerceAtLeast(0)
-            val indicatorOffset by animateDpAsState(
-                targetValue = itemWidth * selectedIndex.toFloat(),
-                animationSpec = LpMotion.indicatorSpec,
-                label = "lpNavIndicator",
-            )
-
-            // 选中指示：品牌渐变压到 22%/16%，只做「被点亮」的暗示，不抢图标颜色
-            Box(
-                modifier = Modifier
-                    .offset(x = indicatorOffset)
-                    .width(itemWidth)
-                    .fillMaxHeight()
-                    .clip(IndicatorShape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                LpColors.Accent.copy(alpha = 0.22f),
-                                LpColors.AccentAlt.copy(alpha = 0.16f),
-                            ),
-                            start = Offset.Zero,
-                            end = Offset.Infinite,
-                        ),
-                    ),
-            )
-
-            Row(modifier = Modifier.fillMaxSize()) {
-                items.forEach { item ->
-                    val active = item == selected
-                    val tint = if (active) LpColors.TextPrimary else LpColors.TextMuted
-                    val interaction = remember { MutableInteractionSource() }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(IndicatorShape)
-                            .clickable(
-                                interactionSource = interaction,
-                                indication = LocalIndication.current,
-                                role = Role.Tab,
-                                onClick = { onSelect(item) },
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = item.icon(),
-                                contentDescription = item.label,
-                                tint = tint,
-                                modifier = Modifier.size(21.dp),
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = item.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = tint,
-                            )
-                        }
+                    composable(NavTarget.INTERVIEW.route) {
+                        InterviewScreen(
+                            container = container,
+                            onNavigate = ::navigate,
+                            // 保存成功后回到首页；首页 ON_RESUME 会刷新档案/目标。
+                            onSaved = {
+                                navController.popBackStack(NavTarget.INTERVIEW.route, inclusive = true)
+                            },
+                        )
                     }
                 }
             }
@@ -341,8 +241,71 @@ private fun LpFloatingBottomBar(
     }
 }
 
-private val BarShape = RoundedCornerShape(28.dp)
-private val IndicatorShape = RoundedCornerShape(22.dp)
+/**
+ * 标准底部导航栏：整条贴底、顶部一条细分割线、带导航栏 insets。
+ *
+ * 为什么不再做悬浮胶囊：滚动内容从胶囊两侧露出来时，视觉上像"内容被切断了"，
+ * 这也是用户反馈"页面重叠、混乱"的来源之一。整条栏把内容与导航彻底分开。
+ */
+@Composable
+private fun LpBottomBar(
+    items: List<NavTarget>,
+    selected: NavTarget,
+    onSelect: (NavTarget) -> Unit,
+) {
+    val density = LocalDensity.current
+    // 键盘弹出时外层已经 imePadding()；此时不叠加导航栏高度，避免多出一条空隙。
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+    val bottomInset = if (imeVisible) {
+        0.dp
+    } else {
+        with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(LpColors.SurfaceHigh)
+            .padding(bottom = bottomInset),
+    ) {
+        HorizontalDivider(color = LpColors.Border, thickness = 1.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(58.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            items.forEach { item ->
+                val active = item == selected
+                val tint = if (active) LpColors.Accent else LpColors.TextMuted
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable(role = Role.Tab) { onSelect(item) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = item.icon(),
+                        contentDescription = item.label,
+                        tint = tint,
+                        modifier = Modifier.size(21.dp),
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = item.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = tint,
+                        fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+    }
+}
 
 private fun NavTarget.icon(): ImageVector = when (this) {
     NavTarget.DASHBOARD -> Icons.Outlined.Home
@@ -352,4 +315,5 @@ private fun NavTarget.icon(): ImageVector = when (this) {
     NavTarget.REVIEW -> Icons.Outlined.Insights
     NavTarget.PROFILE -> Icons.Outlined.Person
     NavTarget.SETTINGS -> Icons.Outlined.Settings
+    NavTarget.INTERVIEW -> Icons.Outlined.RecordVoiceOver
 }

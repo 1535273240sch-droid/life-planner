@@ -28,7 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -48,7 +48,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
@@ -56,26 +55,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.lifeplanner.ai.ui.theme.LpColors
-import com.lifeplanner.ai.ui.theme.LpGradients
 
 /**
- * 全应用共用的基础组件（Aurora Ink）。
+ * 全应用共用的基础组件（Warm Journal · 2.2）。
  *
- * 约定：页面里不要重复实现卡片 / 空状态 / 错误条 / 按钮 / 徽章。
- * 既有组件的「签名」保持完全不变（其余 6 个页面仍在调用），只重绘内部：
- * 圆角变大、面变亮一档、描边变柔、按压有回弹 —— 这些是本次视觉升级的全部手段。
+ * 2.2 的视觉原则：
+ * - 面是实色，层级靠"亮一档 + 一条细边"，不用发光、玻璃叠加与高饱和渐变；
+ * - 一张卡片最多承载一件事，能不用卡片就不用（例如统计改成一行数字）；
+ * - 动效只做"淡入 + 极小位移"，不做错落弹跳与过度按压。
+ *
+ * 兼容约束：既有组件的签名保持不变（7 个页面仍在调用），只重绘内部。
  */
 
-/** 卡片圆角：外层 20dp，内层小卡 16dp（DESIGN.md §4）。 */
-private val CardShape = RoundedCornerShape(20.dp)
-private val InnerShape = RoundedCornerShape(16.dp)
+/** 卡片圆角：外层 16dp，内层 12dp。 */
+private val CardShape = RoundedCornerShape(16.dp)
+private val InnerShape = RoundedCornerShape(12.dp)
 
-/**
- * 标准卡片：Surface 面 + 一层极淡的白色顶光。
- *
- * 为什么不用 elevation：深色底上 Material 阴影只会糊成一团灰；
- * 用「面亮度差 + 1px 柔边」表达层级在深色主题下更干净，也不吃性能。
- */
+/** 标准卡片：实色面 + 1px 细边。 */
 @Composable
 fun LpCard(
     modifier: Modifier = Modifier,
@@ -85,10 +81,8 @@ fun LpCard(
     val interaction = remember { MutableInteractionSource() }
     val base = modifier
         .fillMaxWidth()
-        .lpPressScale(interactionSource = interaction, enabled = onClick != null)
         .clip(CardShape)
         .background(LpColors.Surface)
-        .background(LpGradients.Glass)
         .border(1.dp, LpColors.Border, CardShape)
         .then(
             if (onClick != null) {
@@ -101,13 +95,13 @@ fun LpCard(
                 Modifier
             },
         )
-        .padding(18.dp)
+        .padding(16.dp)
     Column(modifier = base, content = content)
 }
 
 /**
- * 玻璃卡：比 LpCard 更透、更亮的浮起面，用于首页概览、每日一句等「被光照到」的区域。
- * 与 LpCard 的区别只在材质，不改变内容布局，二者可以互相替换。
+ * 旧版"玻璃卡"的兼容别名：2.2 去掉了半透明叠层，现在与 LpCard 一致。
+ * 保留函数名是为了不再改 7 个页面的调用点。
  */
 @Composable
 fun LpGlassCard(
@@ -115,37 +109,12 @@ fun LpGlassCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .lpPressScale(interactionSource = interaction, enabled = onClick != null)
-            .clip(CardShape)
-            .background(LpColors.Surface.copy(alpha = 0.72f))
-            .background(LpGradients.Glass)
-            .border(1.dp, LpColors.Border, CardShape)
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = interaction,
-                        indication = LocalIndication.current,
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier
-                },
-            )
-            .padding(18.dp),
-        content = content,
-    )
+    LpCard(modifier = modifier, onClick = onClick, content = content)
 }
 
 /**
- * 极光背景：墨色底 + 两团极低透度的径向光晕（左上紫、右下青）。
- *
- * 为什么用 Canvas 画而不是贴图：光晕要跟着屏幕尺寸走，图片会在大屏上拉糊；
- * 两团 radialGradient 的绘制成本几乎为零，也不会随滚动重绘。
- * 光晕透明度刻意压到 0.16/0.10 —— 再高就会在纯色卡片边缘露出"脏"色。
+ * 应用背景：暖色近黑 + 极轻的纵向明暗过渡。
+ * 不绘制光晕——发光圆斑是"AI 生成器"视觉的典型符号，与手账的安静感冲突。
  */
 @Composable
 fun LpBackground(
@@ -155,31 +124,17 @@ fun LpBackground(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(LpColors.Background),
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF141210), LpColors.Background),
+                ),
+            ),
     ) {
-        Canvas(modifier = Modifier.matchParentSize()) {
-            // 左上紫光：从屏幕顶部偏左漫出来
-            drawRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(LpColors.Accent.copy(alpha = 0.16f), Color.Transparent),
-                    center = Offset(size.width * 0.10f, size.height * 0.02f),
-                    radius = size.width * 0.95f,
-                ),
-            )
-            // 右下青光：压在中段，避免和底部胶囊导航撞色
-            drawRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(LpColors.AccentAlt.copy(alpha = 0.10f), Color.Transparent),
-                    center = Offset(size.width * 0.92f, size.height * 0.46f),
-                    radius = size.width * 0.85f,
-                ),
-            )
-        }
         content()
     }
 }
 
-/** 区块标题：主标题 + 可选副标题 + 右侧操作（首页/各页统一用这个）。 */
+/** 区块标题：主标题 + 可选副标题 + 右侧操作。 */
 @Composable
 fun LpSectionHeader(
     title: String,
@@ -240,7 +195,7 @@ fun LpEmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 28.dp, horizontal = 16.dp),
+            .padding(vertical = 26.dp, horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -265,13 +220,13 @@ fun LpErrorBanner(
     modifier: Modifier = Modifier,
     onRetry: (() -> Unit)? = null,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(12.dp)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .background(LpColors.Danger.copy(alpha = 0.10f))
-            .border(1.dp, LpColors.Danger.copy(alpha = 0.28f), shape)
+            .border(1.dp, LpColors.Danger.copy(alpha = 0.26f), shape)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -293,10 +248,7 @@ fun LpErrorBanner(
     }
 }
 
-/**
- * 加载态：小尺寸内联转圈。
- * 为什么不用整屏骨架：首页已有内容时把内容整块换成 loading 会闪屏（DESIGN.md §5 明令禁止）。
- */
+/** 加载态：小尺寸内联转圈，不整屏替换内容。 */
 @Composable
 fun LpLoading(modifier: Modifier = Modifier) {
     Box(
@@ -306,14 +258,14 @@ fun LpLoading(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         CircularProgressIndicator(
-            modifier = Modifier.size(26.dp),
+            modifier = Modifier.size(24.dp),
             color = LpColors.Accent,
-            strokeWidth = 2.5.dp,
+            strokeWidth = 2.dp,
         )
     }
 }
 
-/** 徽章：胶囊 + 14% 同色底 + 22% 同色描边。 */
+/** 徽章：低饱和小胶囊。 */
 @Composable
 fun LpBadge(text: String, color: Color = LpColors.Accent, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(999.dp)
@@ -321,9 +273,8 @@ fun LpBadge(text: String, color: Color = LpColors.Accent, modifier: Modifier = M
         text = text,
         modifier = modifier
             .clip(shape)
-            .background(color.copy(alpha = 0.14f))
-            .border(1.dp, color.copy(alpha = 0.22f), shape)
-            .padding(horizontal = 10.dp, vertical = 3.dp),
+            .background(color.copy(alpha = 0.10f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
         style = MaterialTheme.typography.labelSmall,
         color = color,
     )
@@ -334,7 +285,7 @@ fun LpDivider(modifier: Modifier = Modifier) {
     HorizontalDivider(modifier = modifier, color = LpColors.Border, thickness = 1.dp)
 }
 
-/** 表单主按钮（既有签名）：渐变底 + 16dp 圆角 + 按压回弹。 */
+/** 表单主按钮：实色陶土，不用渐变。 */
 @Composable
 fun LpPrimaryButton(
     text: String,
@@ -346,10 +297,9 @@ fun LpPrimaryButton(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(50.dp)
-            .lpPressScale(interactionSource = interaction, enabled = enabled)
+            .height(46.dp)
             .clip(InnerShape)
-            .background(if (enabled) LpGradients.Brand else SolidColor(LpColors.SurfaceVariant))
+            .background(if (enabled) LpColors.Accent else LpColors.SurfaceVariant)
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
@@ -366,12 +316,7 @@ fun LpPrimaryButton(
         )
     }
 }
-
-/**
- * 渐变主按钮：与 LpPrimaryButton 同一套视觉，额外支持 loading 态。
- * 为什么 loading 不换文案：文案突然变成"处理中…"会让按钮宽度跳动；
- * 加一个内联 spinner、保留原文案，按钮尺寸稳定，用户也知道点的是什么。
- */
+/** 主按钮（带 loading）：与 LpPrimaryButton 同一套视觉。 */
 @Composable
 fun LpGradientButton(
     text: String,
@@ -385,10 +330,9 @@ fun LpGradientButton(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(50.dp)
-            .lpPressScale(interactionSource = interaction, enabled = active)
+            .height(46.dp)
             .clip(InnerShape)
-            .background(if (enabled) LpGradients.Brand else SolidColor(LpColors.SurfaceVariant))
+            .background(if (enabled) LpColors.Accent else LpColors.SurfaceVariant)
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
@@ -400,11 +344,11 @@ fun LpGradientButton(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (loading) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(15.dp),
                     color = LpColors.Background,
                     strokeWidth = 2.dp,
                 )
@@ -414,8 +358,7 @@ fun LpGradientButton(
                 style = MaterialTheme.typography.titleMedium,
                 color = when {
                     !enabled -> LpColors.TextMuted
-                    // 处理中时正文压暗，让 spinner 成为视觉焦点，同时保留可读性
-                    loading -> LpColors.Background.copy(alpha = 0.65f)
+                    loading -> LpColors.Background.copy(alpha = 0.7f)
                     else -> LpColors.Background
                 },
             )
@@ -424,32 +367,28 @@ fun LpGradientButton(
 }
 
 /**
- * 首页 Hero 卡：渐变描边大卡。
- * 为什么描边用渐变 Brush：整卡铺满渐变会压掉正文对比度，
- * 只在 1px 边缘做渐变，既有"发光"感又不影响阅读。
+ * 旧版 Hero 卡的兼容别名：现在是普通浮起面。
+ * 首页不再使用它，保留是为了不影响仍调用它的页面。
  */
 @Composable
 fun LpHeroCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(24.dp)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(LpColors.Surface.copy(alpha = 0.92f))
-            .background(LpGradients.Hero)
-            .border(width = 1.dp, brush = LpGradients.HeroBorder, shape = shape)
-            .padding(20.dp),
+            .clip(CardShape)
+            .background(LpColors.SurfaceHigh)
+            .border(1.dp, LpColors.Border, CardShape)
+            .padding(18.dp),
         content = content,
     )
 }
 
 /**
- * AI 提问条：玻璃胶囊 + 右侧渐变发送钮。
- * 整条可点（不是只有按钮可点）—— 用户的第一反应是点文字区域，
- * 只让 44dp 的小圆可点会让人觉得"没反应"。
+ * 记录入口条：整条可点，右侧只有一个小的"＋"。
+ * 2.2 去掉玻璃胶囊与渐变发送钮——那套视觉更像聊天机器人，而不是记事本。
  */
 @Composable
 fun LpAskBar(
@@ -458,23 +397,15 @@ fun LpAskBar(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(999.dp)
-    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .lpPressScale(interactionSource = interaction)
             .clip(shape)
-            .background(LpColors.SurfaceHigh.copy(alpha = 0.90f))
-            .background(LpGradients.Glass)
+            .background(LpColors.Surface)
             .border(1.dp, LpColors.Border, shape)
-            .clickable(
-                interactionSource = interaction,
-                indication = LocalIndication.current,
-                role = Role.Button,
-                onClick = onClick,
-            )
-            .padding(start = 18.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -485,7 +416,7 @@ fun LpAskBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(3.dp))
             Text(
                 text = hint,
                 style = MaterialTheme.typography.labelSmall,
@@ -494,29 +425,27 @@ fun LpAskBar(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(10.dp))
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(34.dp)
                 .clip(CircleShape)
-                .background(LpGradients.Brand),
+                .background(LpColors.Accent.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.Send,
-                contentDescription = "发送",
-                tint = LpColors.Background,
-                modifier = Modifier.size(20.dp),
+                imageVector = Icons.Rounded.Add,
+                contentDescription = "记录",
+                tint = LpColors.Accent,
+                modifier = Modifier.size(18.dp),
             )
         }
     }
 }
 
 /**
- * 每日一句卡：短语 + 作者 + 生活/学习/工作三条提醒（默认展开，可折叠）。
- *
- * 为什么默认展开：这三条提醒是首页"今天该怎么过"的核心信息，
- * 藏起来就等于没有；折叠只是给已经看过的用户一个压缩版面的选择。
+ * 每日一句：引文 + 作者 + 生活/学习/工作提醒。
+ * 一眼能读完，所以提醒默认展开；"收起"只用于已经看过的用户压缩版面。
  */
 @Composable
 fun LpQuoteCard(
@@ -526,9 +455,9 @@ fun LpQuoteCard(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(true) }
-    val tipColors = listOf(LpColors.Accent, LpColors.AccentAlt, LpColors.Info)
+    val tipColors = listOf(LpColors.Positive, LpColors.Info, LpColors.Warning)
 
-    LpGlassCard(modifier = modifier) {
+    LpCard(modifier = modifier) {
         Text(
             text = quote,
             style = MaterialTheme.typography.bodyLarge,
@@ -543,9 +472,9 @@ fun LpQuoteCard(
             )
         }
         if (tips.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             LpDivider()
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -557,7 +486,7 @@ fun LpQuoteCard(
                 Text(
                     text = if (expanded) "收起提醒" else "展开提醒",
                     style = MaterialTheme.typography.labelSmall,
-                    color = LpColors.Accent,
+                    color = LpColors.TextMuted,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
@@ -573,7 +502,7 @@ fun LpQuoteCard(
                 exit = fadeOut(animationSpec = LpMotion.fadeOutSpec) +
                     shrinkVertically(animationSpec = LpMotion.sizeSpec),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     tips.forEachIndexed { index, tip ->
                         Row(verticalAlignment = Alignment.Top) {
                             LpBadge(
@@ -595,16 +524,19 @@ fun LpQuoteCard(
     }
 }
 
-/** 概览小卡：数字大、标签弱，用于连续记录 / 完成率 / 今日任务。 */
+/**
+ * 概览数字：不再包卡片，只留"数字 + 标签"，一行三列时靠分隔线分组。
+ * 私人工具里的统计应该像手账边注，而不是三块发光仪表盘。
+ */
 @Composable
 fun LpStatTile(
     label: String,
     value: String,
     unit: String = "",
-    color: Color = LpColors.Accent,
+    color: Color = LpColors.TextPrimary,
     modifier: Modifier = Modifier,
 ) {
-    LpGlassCard(modifier = modifier) {
+    Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
@@ -612,16 +544,16 @@ fun LpStatTile(
                 color = color,
             )
             if (unit.isNotBlank()) {
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(3.dp))
                 Text(
                     text = unit,
                     style = MaterialTheme.typography.labelSmall,
                     color = LpColors.TextMuted,
-                    modifier = Modifier.padding(bottom = 4.dp),
+                    modifier = Modifier.padding(bottom = 3.dp),
                 )
             }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
@@ -630,12 +562,7 @@ fun LpStatTile(
     }
 }
 
-/**
- * 环形进度：600ms 补间，避免数据刷新时"跳"一下。
- *
- * 为什么不做扫角渐变：环形只有 6dp 宽，渐变在这么窄的弧上几乎看不出来，
- * 反而增加一层 Shader 开销；用纯色 + 圆头端点已经足够精致。
- */
+/** 环形进度：600ms 补间。 */
 @Composable
 fun LpProgressRing(
     progress: Float,
@@ -681,7 +608,7 @@ fun LpProgressRing(
     }
 }
 
-/** 输入框（既有签名）：底色抬到 SurfaceHigh，聚焦时只换描边颜色，不做缩放。 */
+/** 输入框：实色底 + 细边，聚焦只换描边颜色。 */
 @Composable
 fun LpOutlinedField(
     value: String,
@@ -707,8 +634,8 @@ fun LpOutlinedField(
             focusedTextColor = LpColors.TextPrimary,
             unfocusedTextColor = LpColors.TextPrimary,
             disabledTextColor = LpColors.TextMuted,
-            focusedContainerColor = LpColors.SurfaceHigh,
-            unfocusedContainerColor = LpColors.SurfaceHigh,
+            focusedContainerColor = LpColors.SurfaceVariant,
+            unfocusedContainerColor = LpColors.SurfaceVariant,
             disabledContainerColor = LpColors.Surface,
             cursorColor = LpColors.Accent,
             focusedBorderColor = LpColors.Accent,
@@ -721,7 +648,7 @@ fun LpOutlinedField(
     )
 }
 
-/** 竖向间距糖：`Spacer(LpSpacing.sm)` */
+/** 竖向间距糖：Spacer(LpSpacing.sm) */
 object LpSpacing {
     val xs = 4.dp
     val sm = 8.dp
@@ -736,21 +663,20 @@ object LpSpacing {
     val section = 24.dp
 
     /** 卡片内边距。 */
-    val cardPadding = 18.dp
+    val cardPadding = 16.dp
 }
 
-/** 提示条：普通说明（info）或警告（warn），弱底色 + 同色描边，不做整块高饱和。 */
+/** 提示条：普通说明（info）或警告（warn）。 */
 @Composable
 fun LpHint(text: String, warn: Boolean = false, modifier: Modifier = Modifier) {
     val color = if (warn) LpColors.Warning else LpColors.Info
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(10.dp)
     Text(
         text = text,
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(color.copy(alpha = 0.08f))
-            .border(1.dp, color.copy(alpha = 0.18f), shape)
+            .background(color.copy(alpha = 0.07f))
             .padding(12.dp),
         style = MaterialTheme.typography.bodySmall,
         color = color,

@@ -1,6 +1,6 @@
 # 人生智能编排体 (Life Planner AI) - Android 工程
 
-包名 `com.lifeplanner.ai`，当前版本 `2.1.0`（versionCode 8）。
+包名 `com.lifeplanner.ai`，当前版本 `2.2.0`（versionCode 9）。
 
 v2.0.0 起这是**完全自包含的原生 Android 应用**：Kotlin + Jetpack Compose + 手机本地 SQLite（SQLDelight）。
 不再使用 WebView，不再需要电脑端 FastAPI 服务，也不加载任何 CDN 资源。
@@ -24,7 +24,8 @@ android/
 │   └── src/main/kotlin/com/lifeplanner/ai/
 │       ├── LifePlannerApp.kt   # Application + AppContainer（手动 DI）
 │       ├── ui/                 # 7 个 Compose 页面、通用组件、Aurora Ink 主题、导航
-│       ├── ui/dashboard/CaptureSheet.kt  # 首页「AI 一句话整理」弹窗
+│       ├── ui/dashboard/CaptureSheet.kt  # 首页「一句话整理」弹窗
+│       ├── ui/interview/       # AI 建档访谈（聊天式提问 + 草稿确认）
 │       ├── notify/             # 每日推送（渠道/闹钟/开机重排/通知导航）
 │       ├── data/SettingsStore.kt
 │       └── net/OkHttpTransport.kt
@@ -40,6 +41,7 @@ android/
   - 未配置或请求失败时显示真实的中文错误，不会用模板冒充 AI。
   - 调用前先做本地危机关键词筛查；命中即短路，不发出网络请求，并显示 24 小时热线。
 - **一句话整理**：首页弹窗里输入自由文本，AI 整理成生活记录 / 今日任务 / 新目标，勾选确认后才落库。
+- **建档访谈**：AI 逐轮提问（年龄/性别/工作/收入/生活状态/愿景/达成方式/未来自我/约束），结束时整理成档案与最多 3 个建议目标，确认后保存；已有的档案字段会先预填，不重复问。
 - **每日推送**：早间能量 + 晚间复盘两次本地推送，可开关/改时间；内容离线生成，不耗 AI 额度。
 - **数据导出**：设置页通过系统文件选择器导出单个 JSON；导入为覆盖式（有二次确认）。
 - **隐私**：配置 Key 后，档案、技能、进行中目标与近 7 天日志（含健康数据）会发送给所选模型服务商。
@@ -77,7 +79,7 @@ Windows 下也可以双击 `build_apk.bat`。
 ### 测试
 
 ```bash
-./gradlew :core:test              # 122 个纯 JVM 单元测试
+./gradlew :core:test              # 138 个纯 JVM 单元测试
 ./gradlew :app:testDebugUnitTest  # 14 个 Robolectric 测试（建库/仓储/备份/AI 错误路径/MainActivity 启动）
 ```
 
