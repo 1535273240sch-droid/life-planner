@@ -1,13 +1,17 @@
 # 📱 人生智能编排体 (Life Planner AI)
 
 > **懂你、判断、解释、推动你前进的贴身人生规划与决策助手**  
-> *手机优先的移动端界面（纯黑底色 + 毛玻璃风格）*
+> *v2.0.0 起为完全自包含的 Android 原生应用（Kotlin + Jetpack Compose + 手机本地 SQLite）*
 
 ---
 
+> [!IMPORTANT]
+> **v2.0.0 原生版（推荐）**：APK 内置全部业务逻辑与本地数据库，**不需要电脑、不需要局域网后端**。目标、记录、统计、缺口检测、备份导入导出都能离线使用；只有 AI 功能需要你自备 OpenAI 兼容 API Key。
+> 下文「手机快速访问」与 Python 服务端相关章节属于 **v1 遗留方案**，仍保留在仓库中可继续使用，但已不是手机端的主要形态。
+
 > [!CAUTION]
-> **安全提示：本服务没有任何登录保护。**  
-> `start.py` 会把服务绑定到 `0.0.0.0`，同一 Wi-Fi 下的任何人只要知道你电脑的地址，就能打开页面并读写你的全部数据（包括身高体重、疾病、过敏等健康信息）。请只在可信网络（自己家里的 Wi-Fi）使用，不要在公共 Wi-Fi、学校或公司网络里运行。
+> **v1 Python 服务端没有任何登录保护。**  
+> `start.py` 会把服务绑定到 `0.0.0.0`，同一 Wi-Fi 下的任何人只要知道你电脑的地址，就能打开页面并读写你的全部数据（包括身高体重、疾病、过敏等健康信息）。请只在可信网络（自己家里的 Wi-Fi）使用。v2 原生 APK 不受此问题影响（数据只在本机）。
 
 > [!WARNING]
 > **隐私提示：配置了 AI Key 后，你的健康数据会发给第三方模型服务商。** 详见下文「安全守则与隐私透明声明」。
@@ -53,32 +57,46 @@ flowchart LR
 
 ---
 
-### 3. Android 工程与 APK（WebView 套壳）
+### 3. Android 原生 APK（v2，完全自包含）
 
-仓库内含一个 Android Studio 工程（位于 `android/` 目录，Kotlin）。它是一个 **WebView 套壳**：APK 里只打包了一个轻量的移动端界面，**必须在 App 右上角 ⚙️ 填写后端地址（如 `http://192.168.1.100:8000`）才能使用，没有离线模式**。没填地址或连不上时，界面会明确提示，不会显示假数据。
+仓库内含 Android 工程（位于 `android/`）。v2.0.0 起它是 **Kotlin + Jetpack Compose 原生应用**，不再是 WebView 套壳：
+
+- 全部业务逻辑与数据都在手机本地（SQLDelight / SQLite），不连接电脑；
+- 目标树、每日记录、统计趋势、生活缺口、JSON 备份导入导出全部离线可用；
+- AI 功能（顾问 / 每日规划 / 复盘 / 目标拆解）只在你配置了 OpenAI 兼容 API Key 后启用；未配置或调用失败时明确报错，不生成替代内容；
+- 界面与图表均为原生绘制，不依赖任何 CDN。
 
 ```
 android/
+├── core/                          # 纯 Kotlin 业务内核（可脱离 Android 跑单测）
+│   └── src/main/kotlin/com/lifeplanner/core/
+│       ├── model/                 # 领域模型
+│       ├── logic/                 # 目标树/进度/统计/缺口/记录编排
+│       ├── ai/                    # 提示词、危机筛查、响应校验、AiService
+│       ├── json/                  # 备份导出/导入
+│       ├── data/                  # SQLDelight 仓储实现
+│       └── db/                    # 表结构与 SQL
 ├── app/
-│   ├── src/main/java/com/lifeplanner/ai/
-│   │   ├── MainActivity.kt        # 主 Activity，用 WebViewAssetLoader 加载 assets 里的页面
-│   │   └── WebAppInterface.kt    # 震动、Toast 桥接
-│   ├── src/main/AndroidManifest.xml
-│   └── src/main/assets/www/       # 打包进 APK 的界面（需连接后端）
-├── build.gradle                   # Gradle 构建脚本
-├── build_apk.bat                  # 命令行构建脚本（需要 gradlew 或全局 gradle）
-└── README.md                      # Android 工程详细说明
+│   └── src/main/kotlin/com/lifeplanner/ai/
+│       ├── AppContainer.kt        # 手动依赖容器
+│       ├── ui/                    # 7 个 Compose 页面 + 通用组件 + 主题
+│       ├── data/SettingsStore.kt  # AI 配置（SharedPreferences）
+│       └── net/OkHttpTransport.kt # OpenAI 兼容端点传输
+├── gradlew / gradlew.bat          # 已提交 Gradle Wrapper（8.4）
+└── build.gradle
 ```
 
-> [!WARNING]
-> **关于 APK 的状态**：本仓库没有提交 `gradle-wrapper.jar` 和 `gradlew`，因此不能直接用 `gradlew` 构建。请用 Android Studio 打开 `android/`，或安装 Gradle 8.4 后运行 `android/build_apk.bat`。CI 工作流（`.github/workflows/android-apk-build.yml`）会构建 Debug APK，但本次改动没有在本机编译验证过 Android 代码，以 CI 或你自己的构建结果为准。
->
-> **明文 HTTP 风险**：局域网后端是 `http://` 而非 HTTPS，同一网络中的人理论上能看到传输内容。App 内置的页面只允许 `http://` 连接局域网/本机地址，公网地址必须用 `https://`。建议后端只放在可信 Wi-Fi 下，将来可在后端前加 HTTPS。
+#### 📦 获取并安装 APK
+1. **CI 构建**：推送到 `main` 或打 `v*` 标签后，GitHub Actions 会构建 Debug APK；打标签时还会自动创建 Release 并附上 APK。
+2. **本地构建**：需要 JDK 17 与 Android SDK（compileSdk 34），然后：
+   ```bash
+   cd android
+   ./gradlew assembleDebug
+   # 产物：app/build/outputs/apk/debug/app-debug.apk
+   ```
+3. 安装到手机（USB 或 `adb install -r app-debug.apk`），打开 App 后在「设置」里填写 API Key 即可使用 AI；不填也能完整使用本地功能。
 
-#### 📦 获取并安装 APK：
-1. 用 Android Studio 打开 `android/` 目录，菜单 **Build -> Build Bundle(s) / APK(s) -> Build APK(s)**，得到 `app-debug.apk`；
-2. 通过 USB 数据线或其他方式传到手机安装，或使用 `adb install -r app-debug.apk`；
-3. 打开 App，点击右上角 ⚙️ 填写后端地址。
+> **明文 HTTP 说明**：设置页允许 `http://` 仅用于本机/局域网 API 端点（如自建代理），公网地址必须使用 `https://`，保存时会校验；Android 清单允许明文流量只是为了支持局域网场景。
 
 ---
 
@@ -129,24 +147,30 @@ android/
 
 ## 🛠️ 技术栈与架构
 
+### v2 Android 原生（当前主形态）
 ```
-人生智能编排体 (Life Planner AI)
-├── 后端 (Backend)
-│   ├── FastAPI（异步 API 框架）
-│   ├── SQLAlchemy 2.0（ORM）
-│   ├── SQLite 3（本地数据库）
-│   ├── Pydantic v2（请求与响应校验）
-│   └── Uvicorn（ASGI 服务器）
-├── 前端 (Mobile-first Web / PWA)
-│   ├── Jinja2 模板（服务端渲染）
-│   ├── TailwindCSS（CDN）
-│   ├── Chart.js（图表）
-│   └── PWA Web Manifest 与 Service Worker
-└── AI 模块
-    ├── OpenAI 协议兼容客户端（OpenAI、DeepSeek、硅基流动、各类代理等任何兼容端点）
-    ├── 上下文组装器（档案 + 技能 + 进行中目标 + 近 7 天日志）
-    └── 本地危机内容拦截（不调用模型）
+Kotlin 1.9.22 + Jetpack Compose (BOM 2024.02) + Material 3
+├── core/  纯 Kotlin 业务内核
+│   ├── SQLDelight 2.0.1 + SQLite（手机本地单用户库）
+│   ├── kotlinx-datetime / kotlinx-serialization-json
+│   ├── 目标树/软删除/进度状态机/统计/缺口检测
+│   ├── 本地危机关键词筛查（命中即短路，不发网络请求）
+│   └── JSON 备份导入导出（版本校验 + id 重映射）
+└── app/   Android 接入层
+    ├── 7 个 Compose 页面（总览/目标/记录/顾问/复盘/档案/设置）
+    ├── OkHttp 4.12（OpenAI 兼容端点）
+    ├── SharedPreferences（AI 配置）
+    └── Storage Access Framework（备份文件读写）
 ```
+
+### v1 遗留（仓库仍保留，可选）
+```
+后端：FastAPI + SQLAlchemy 2.0 + SQLite + Pydantic v2 + Uvicorn
+前端：Jinja2 模板 + TailwindCSS(CDN) + Chart.js + PWA
+Android：WebView 套壳（需连接电脑后端）
+```
+v1 与 v2 共用同一套业务语义（目标层级/软删除/进度规则/缺口口径/危机词表/错误码），
+v2 的 `core` 单测覆盖这些规则，v1 的 422 个 pytest 仍可用于回归。
 
 ---
 
@@ -244,6 +268,15 @@ pip install -r requirements.txt
 
 ## 🧪 自动化测试
 
+### v2 Android（Kotlin）
+```bash
+cd android
+./gradlew :core:test             # 业务内核：96 个纯 JVM 单测
+./gradlew :app:testDebugUnitTest # Robolectric 冒烟：建库/仓储/备份/AI 错误路径
+```
+需要 JDK 17 与 Android SDK 34。
+
+### v1 Python
 测试使用临时数据库，不会改动你的 `life_planner.db`；AI 部分使用测试桩，不会连接真实模型服务。
 
 ```bash

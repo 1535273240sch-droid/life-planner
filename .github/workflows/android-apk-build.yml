@@ -31,6 +31,10 @@ jobs:
         with:
           gradle-version: '8.4'
 
+      - name: Run core unit tests
+        working-directory: android
+        run: gradle :core:test --stacktrace
+
       - name: Build Android Debug APK
         working-directory: android
         run: gradle assembleDebug --stacktrace

@@ -1,0 +1,210 @@
+-- v2 数据层查询语句。表定义见 Tables.sq（本文件不改表结构，只加语句）。
+-- 注意：同一个 .sq 文件里的所有命名语句会生成到同一个 Kotlin Queries 类，
+-- 因此语句名必须全局唯一 —— 故统一按实体加前缀（Profile/Skill/Goal/Task/DailyLog/AiMessage）。
+-- 参数一律用位置 `?`，Kotlin 侧按本文件中出现的顺序位置传参。
+
+-- 最近一次插入的 rowid：与插入同处一个事务，用于取新插入行的 id。
+lastInsertRowId:
+SELECT last_insert_rowid();
+
+-- ============================== profile ==============================
+
+selectProfile:
+SELECT id, age, gender, occupation, industry, years_of_work, education, major, health_info, vision, constraints, updated_at
+FROM profile
+LIMIT 1;
+
+selectProfileId:
+SELECT id FROM profile LIMIT 1;
+
+insertProfile:
+INSERT INTO profile(age, gender, occupation, industry, years_of_work, education, major, health_info, vision, constraints, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- 指定 id 写回（单行档案更新用；调用方先 deleteAll，天然单行，不需 OR REPLACE）
+insertProfileWithId:
+INSERT INTO profile(id, age, gender, occupation, industry, years_of_work, education, major, health_info, vision, constraints, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteAllProfiles:
+DELETE FROM profile;
+
+-- =============================== skill ===============================
+
+selectAllSkills:
+SELECT id, name, category, level, note
+FROM skill
+ORDER BY id;
+
+insertSkill:
+INSERT INTO skill(name, category, level, note) VALUES (?, ?, ?, ?);
+
+insertSkillWithId:
+INSERT INTO skill(id, name, category, level, note) VALUES (?, ?, ?, ?, ?);
+
+updateSkill:
+UPDATE skill SET name = ?, category = ?, level = ?, note = ? WHERE id = ?;
+
+deleteSkillById:
+DELETE FROM skill WHERE id = ?;
+
+deleteAllSkills:
+DELETE FROM skill;
+
+-- =============================== goal ================================
+
+-- 读目标默认排除已软删除（deleted_at IS NULL）
+selectAllGoals:
+SELECT id, parent_id, level, title, category, description, metric, start_date, due_date, progress, status, deleted_at
+FROM goal
+WHERE deleted_at IS NULL
+ORDER BY id;
+
+selectAllGoalsIncludingDeleted:
+SELECT id, parent_id, level, title, category, description, metric, start_date, due_date, progress, status, deleted_at
+FROM goal
+ORDER BY id;
+
+selectGoalById:
+SELECT id, parent_id, level, title, category, description, metric, start_date, due_date, progress, status, deleted_at
+FROM goal
+WHERE id = ? AND deleted_at IS NULL;
+
+selectGoalByIdIncludingDeleted:
+SELECT id, parent_id, level, title, category, description, metric, start_date, due_date, progress, status, deleted_at
+FROM goal
+WHERE id = ?;
+
+insertGoal:
+INSERT INTO goal(parent_id, level, title, category, description, metric, start_date, due_date, progress, status, deleted_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- 导入用：保留原 id，便于 parent_id 引用与往返一致
+insertGoalWithId:
+INSERT INTO goal(id, parent_id, level, title, category, description, metric, start_date, due_date, progress, status, deleted_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateGoal:
+UPDATE goal SET parent_id = ?, level = ?, title = ?, category = ?, description = ?, metric = ?, start_date = ?, due_date = ?, progress = ?, status = ?, deleted_at = ?
+WHERE id = ?;
+
+-- 只标记未删除的行；已删除的行不动（返回给调用方的受影响行数由仓储自行统计）
+softDeleteGoalById:
+UPDATE goal SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL;
+
+-- 子目标 id（软删除的也算，保证子树遍历能穿透）
+selectChildGoalIds:
+SELECT id FROM goal WHERE parent_id = ?;
+
+deleteAllGoals:
+DELETE FROM goal;
+
+-- =============================== task ================================
+
+selectTasksByDate:
+SELECT id, goal_id, date, title, est_minutes, done, done_at
+FROM task
+WHERE date = ?
+ORDER BY id;
+
+selectTasksByGoal:
+SELECT id, goal_id, date, title, est_minutes, done, done_at
+FROM task
+WHERE goal_id = ?
+ORDER BY id;
+
+insertTask:
+INSERT INTO task(goal_id, date, title, est_minutes, done, done_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+insertTaskWithId:
+INSERT INTO task(id, goal_id, date, title, est_minutes, done, done_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+updateTaskDone:
+UPDATE task SET done = ?, done_at = ? WHERE id = ?;
+
+deleteTaskById:
+DELETE FROM task WHERE id = ?;
+
+-- since（含）之后该目标已完成的任务数。date 为 YYYY-MM-DD，字符串比较等价于日期比较。
+countTasksDoneSince:
+SELECT COUNT(*) FROM task WHERE goal_id = ? AND done = 1 AND date >= ?;
+
+-- 全部任务（导出用，不逐日遍历）
+selectAllTasks:
+SELECT id, goal_id, date, title, est_minutes, done, done_at
+FROM task
+ORDER BY id;
+
+deleteAllTasks:
+DELETE FROM task;
+
+-- ============================= daily_log =============================
+
+selectDailyLogByDate:
+SELECT id, date, done_items, study_minutes, study_note, meals, sleep_start, sleep_end, exercise_type, exercise_minutes, mood, energy, reflection
+FROM daily_log
+WHERE date = ?;
+
+selectDailyLogsBetween:
+SELECT id, date, done_items, study_minutes, study_note, meals, sleep_start, sleep_end, exercise_type, exercise_minutes, mood, energy, reflection
+FROM daily_log
+WHERE date >= ? AND date <= ?
+ORDER BY date;
+
+-- 一天一条：不用 ON CONFLICT/UPSERT（安卓 API 24-29 自带 SQLite < 3.24，真机会语法报错）。
+-- 由仓储在事务里先 selectDailyLogByDate，有则 update、无则 insert。
+insertDailyLog:
+INSERT INTO daily_log(date, done_items, study_minutes, study_note, meals, sleep_start, sleep_end, exercise_type, exercise_minutes, mood, energy, reflection)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateDailyLogByDate:
+UPDATE daily_log SET done_items = ?, study_minutes = ?, study_note = ?, meals = ?, sleep_start = ?, sleep_end = ?, exercise_type = ?, exercise_minutes = ?, mood = ?, energy = ?, reflection = ?
+WHERE date = ?;
+
+insertDailyLogWithId:
+INSERT INTO daily_log(id, date, done_items, study_minutes, study_note, meals, sleep_start, sleep_end, exercise_type, exercise_minutes, mood, energy, reflection)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- 全部记录（导出用）
+selectAllDailyLogs:
+SELECT id, date, done_items, study_minutes, study_note, meals, sleep_start, sleep_end, exercise_type, exercise_minutes, mood, energy, reflection
+FROM daily_log
+ORDER BY date;
+
+deleteAllDailyLogs:
+DELETE FROM daily_log;
+
+-- ============================= ai_message ============================
+
+-- 按 id 倒序（最新在前），带 LIMIT
+selectAiMessagesByMode:
+SELECT id, mode, question, answer, source, model_name, created_at
+FROM ai_message
+WHERE mode = ?
+ORDER BY id DESC
+LIMIT ?;
+
+selectRecentAiMessages:
+SELECT id, mode, question, answer, source, model_name, created_at
+FROM ai_message
+ORDER BY id DESC
+LIMIT ?;
+
+insertAiMessage:
+INSERT INTO ai_message(mode, question, answer, source, model_name, created_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+insertAiMessageWithId:
+INSERT INTO ai_message(id, mode, question, answer, source, model_name, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- 全部记录（导出用）
+selectAllAiMessages:
+SELECT id, mode, question, answer, source, model_name, created_at
+FROM ai_message
+ORDER BY id;
+
+deleteAllAiMessages:
+DELETE FROM ai_message;

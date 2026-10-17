@@ -1,0 +1,84 @@
+-- v2 设备本地库表结构（单用户，不再需要 users 表）。
+-- 日期与时间统一用 ISO-8601 字符串（TEXT），与 v1 导出的 JSON 保持一致，便于导入导出。
+-- 本文件是各方共同依赖的数据契约：表结构由主 agent 维护。
+-- 查询语句由「数据层 owner」在本目录下另建文件添加（例如 Queries.sq），不要改本文件的表定义。
+
+CREATE TABLE profile (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    age INTEGER,
+    gender TEXT,
+    occupation TEXT,
+    industry TEXT,
+    years_of_work INTEGER,
+    education TEXT,
+    major TEXT,
+    health_info TEXT NOT NULL DEFAULT '{}',   -- JSON：身高体重/作息/饮食偏好/忌口/疾病过敏
+    vision TEXT,
+    constraints TEXT,
+    updated_at TEXT
+);
+
+CREATE TABLE skill (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT '通用',
+    level INTEGER NOT NULL DEFAULT 5,
+    note TEXT
+);
+
+CREATE TABLE goal (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    parent_id INTEGER REFERENCES goal(id) ON DELETE SET NULL,
+    level TEXT NOT NULL DEFAULT 'long',        -- vision / long / stage / weekly
+    title TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT '职业',
+    description TEXT,
+    metric TEXT,
+    start_date TEXT,
+    due_date TEXT,
+    progress INTEGER NOT NULL DEFAULT 0,        -- 0-100
+    status TEXT NOT NULL DEFAULT 'in_progress', -- in_progress / completed / paused
+    deleted_at TEXT                             -- 非空即软删除；历史任务保留
+);
+
+CREATE TABLE task (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    goal_id INTEGER REFERENCES goal(id) ON DELETE SET NULL,
+    date TEXT NOT NULL,                         -- YYYY-MM-DD
+    title TEXT NOT NULL,
+    est_minutes INTEGER NOT NULL DEFAULT 30,
+    done INTEGER NOT NULL DEFAULT 0,
+    done_at TEXT
+);
+
+CREATE TABLE daily_log (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL UNIQUE,                  -- 一天一条
+    done_items TEXT,
+    study_minutes INTEGER NOT NULL DEFAULT 0,
+    study_note TEXT,
+    meals TEXT NOT NULL DEFAULT '{}',           -- JSON：breakfast/lunch/dinner/snack
+    sleep_start TEXT,                           -- HH:mm
+    sleep_end TEXT,                             -- HH:mm
+    exercise_type TEXT,
+    exercise_minutes INTEGER NOT NULL DEFAULT 0,
+    mood INTEGER NOT NULL DEFAULT 3,            -- 1-5
+    energy INTEGER NOT NULL DEFAULT 3,          -- 1-5
+    reflection TEXT
+);
+
+CREATE TABLE ai_message (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    mode TEXT NOT NULL,                         -- daily_plan / advisor / review / breakdown
+    question TEXT,
+    answer TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'ai_model',    -- ai_model / crisis_safety_guard
+    model_name TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX goal_parent_idx ON goal(parent_id);
+CREATE INDEX goal_deleted_idx ON goal(deleted_at);
+CREATE INDEX task_date_idx ON task(date);
+CREATE INDEX task_goal_idx ON task(goal_id);
+CREATE INDEX ai_message_mode_idx ON ai_message(mode);

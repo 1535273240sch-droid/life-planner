@@ -24,7 +24,7 @@ if %errorlevel% equ 0 (
 
 echo [错误] 找不到 gradlew.bat，也找不到全局 gradle 命令，无法在命令行构建。
 echo.
-echo 本仓库没有提交 gradle-wrapper.jar 与 gradlew 脚本，请任选一种方式：
+echo 本仓库已提交 gradle-wrapper.jar 与 gradlew 脚本（Gradle 8.4），请任选一种方式：
 echo   1. 用 Android Studio 打开本目录（%CD%），
 echo      等待 Gradle Sync 完成后：Build -^> Build Bundle(s) / APK(s) -^> Build APK(s)
 echo   2. 安装 JDK 17 与 Gradle 8.4（https://gradle.org/releases/），并把 gradle 加入 PATH，再重新运行本脚本
@@ -46,7 +46,7 @@ echo.
 echo [完成] 构建成功，APK 位于（相对 android\ 目录）：
 echo     app\build\outputs\apk\debug\app-debug.apk
 echo.
-echo 该 App 是 WebView 套壳，必须在 App 内填写后端地址才能使用，没有离线模式。
+echo 该 App 为完全本地的原生应用，无需电脑后端；AI 需在「设置」里填写 API Key。
 echo 用 USB 数据线安装到手机：
 echo     adb install -r app\build\outputs\apk\debug\app-debug.apk
 

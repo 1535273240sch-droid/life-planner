@@ -1,52 +1,85 @@
 # 人生智能编排体 (Life Planner AI) - Android 工程
 
-包名 `com.lifeplanner.ai`，当前版本 `1.1.0`（versionCode 2）。
+包名 `com.lifeplanner.ai`，当前版本 `2.0.0`（versionCode 3）。
 
-这是一个 WebView 套壳应用：APK 里只打包了一个移动端界面（`app/src/main/assets/www/index.html`），所有数据和 AI 功能都来自你自己运行的后端（仓库根目录的 FastAPI 服务）。
-
-**必须在 App 右上角 ⚙️ 里填写后端地址才能使用，没有离线模式。** 没填地址或连不上时，界面会弹出提示，而不是显示空白或假数据。
+v2.0.0 起这是**完全自包含的原生 Android 应用**：Kotlin + Jetpack Compose + 手机本地 SQLite（SQLDelight）。
+不再使用 WebView，不再需要电脑端 FastAPI 服务，也不加载任何 CDN 资源。
 
 ---
 
+## 模块结构
+
+```
+android/
+├── core/                       # 纯 Kotlin 业务内核（无 android.* 依赖，可 JVM 单测）
+│   └── src/main/kotlin/com/lifeplanner/core/
+│       ├── model/              # Profile / Skill / Goal / Task / DailyLog / AiMessage / 统计结构
+│       ├── logic/              # 目标树、父级/成环校验、进度状态机、记录、统计、缺口检测
+│       ├── ai/                 # 提示词、危机筛查、JSON 提取、AiService、错误码
+│       ├── json/               # JSON 备份导出/导入（含 id 重映射）
+│       ├── data/               # SQLDelight 仓储实现
+│       └── db/                 # 表结构（Tables.sq）与查询（Queries.sq）
+├── app/                        # Android 接入层
+│   └── src/main/kotlin/com/lifeplanner/ai/
+│       ├── LifePlannerApp.kt   # Application + AppContainer（手动 DI）
+│       ├── ui/                 # 7 个 Compose 页面、通用组件、主题、导航
+│       ├── data/SettingsStore.kt
+│       └── net/OkHttpTransport.kt
+├── gradlew / gradlew.bat / gradle/wrapper/   # 已提交的 Gradle Wrapper 8.4
+├── build.gradle / settings.gradle
+└── gradle.properties
+```
+
 ## 工作方式
 
-- 页面通过 `androidx.webkit.WebViewAssetLoader` 加载，地址为 `https://appassets.androidplatform.net/assets/www/index.html`。WebView 已关闭 `file://` 相关的跨源权限（`allowFileAccess`、`allowFileAccessFromFileURLs`、`allowUniversalAccessFromFileURLs`、`allowContentAccess` 均为 false）。
-- 页面用 `fetch` 请求你填写的后端地址。后端已启用 CORS，所以该 https 源可以跨域访问局域网后端。
-- 后端地址格式：`http://192.168.x.x:8000` 或 `https://你的域名`。以 `http://` 或 `https://` 开头，末尾斜杠会自动去掉。`http://` 仅允许本机和局域网地址，公网地址必须用 `https://`。
-- 手机必须能访问到电脑：同一 Wi-Fi，且电脑防火墙放行端口 8000。
+- **本地优先**：目标、记录、统计、缺口、备份全部在手机本地完成，飞行模式可用。
+- **AI 可选**：在「设置」里填写 OpenAI 兼容端点的 API Key / Base URL / 模型名后启用顾问、复盘、目标拆解。
+  - 未配置或请求失败时显示真实的中文错误，不会用模板冒充 AI。
+  - 调用前先做本地危机关键词筛查；命中即短路，不发出网络请求，并显示 24 小时热线。
+- **数据导出**：设置页通过系统文件选择器导出单个 JSON；导入为覆盖式（有二次确认）。
+- **隐私**：配置 Key 后，档案、技能、进行中目标与近 7 天日志（含健康数据）会发送给所选模型服务商。
 
 ## 安全说明（请读）
 
-- 后端 `start.py` 监听 `0.0.0.0` 且没有登录保护。同一 Wi-Fi 下的任何人都能读写你的全部数据（含健康信息）。只在可信网络使用。
-- 局域网后端是明文 `http://`，同一网络里的人理论上可以嗅探到流量。Android 的 `network-security-config` 无法按网段（CIDR）放行明文，局域网 IP 又无法逐个列举，所以本工程保留了对明文的放行，并由页面代码限制 `http://` 只能连私有/本机地址。想要更强的保护，请给后端加 HTTPS（例如放在反向代理后面）。
+- API Key 只保存在本机应用私有 SharedPreferences；默认掩码显示。
+- `http://` 仅允许本机/私有网段（localhost、127.0.0.1、10/8、172.16-31/12、192.168/16、::1）；公网地址必须使用 `https://`，保存时会校验。
 - `allowBackup` 已关闭，应用数据不会被 `adb backup` 导出。
-- 配置了 AI Key 后，健康数据会被后端发给你所配置的模型服务商，详见仓库根目录 `README.md` 的隐私声明。
+- 系统文件导入不是跨仓储事务：导入中途失败可能留下部分数据，界面已明确提示。
 
 ---
 
 ## 构建 APK
 
-本仓库**没有提交** `gradle-wrapper.jar` 与 `gradlew` / `gradlew.bat`。工程按 JDK 17、Gradle 8.4、AGP 8.2.2 配置。
+工程按 JDK 17、Gradle 8.4、AGP 8.2.2 配置。Gradle Wrapper 已提交，直接运行：
 
-### 方式一：Android Studio
-1. 用 Android Studio 打开本目录（`android/`）。
-2. 等待 Gradle Sync 完成。
-3. 菜单 Build -> Build Bundle(s) / APK(s) -> Build APK(s)。
-4. 产物：`app/build/outputs/apk/debug/app-debug.apk`。
-
-### 方式二：命令行
-安装 JDK 17、Android SDK 和 Gradle 8.4 后，在本目录运行 `build_apk.bat`。脚本会依次尝试 `gradlew.bat` 和全局 `gradle`，都没有时会打印下一步该怎么做。
-
-想生成 wrapper，可在已安装 Gradle 的机器上运行：
 ```bash
-gradle wrapper --gradle-version 8.4
+cd android
+./gradlew assembleDebug
+# 产物：app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 方式三：GitHub Actions
-`.github/workflows/android-apk-build.yml` 会用 Gradle 8.4 执行 `gradle assembleDebug` 并上传 APK。
+Windows 下也可以双击 `build_apk.bat`。
+
+> 注意：如果项目路径包含中文，本工程已在 `gradle.properties` 中设置
+> `android.overridePathCheck=true`；若某些 Kotlin/AGP 版本仍报路径错误，
+> 请把仓库复制到纯 ASCII 路径下构建。
+
+### 测试
+
+```bash
+./gradlew :core:test              # 96 个纯 JVM 单元测试
+./gradlew :app:testDebugUnitTest  # Robolectric 冒烟（建库/仓储/备份/AI 错误路径）
+```
+
+### GitHub Actions
+
+`.github/workflows/android-apk-build.yml` 会先跑 `:core:test`，再执行 `assembleDebug` 并上传 APK；
+推送 `v*` 标签时会自动创建 Release 并附上 APK。
 
 ## 安装到手机
+
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
 需要在手机上开启开发者选项和 USB 调试。

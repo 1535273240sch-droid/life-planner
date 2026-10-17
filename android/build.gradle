@@ -6,6 +6,9 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.2.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22"
+        // v2：core 模块需要 Kotlin 序列化与 SQLDelight（生成 Kotlin 代码，便于在 JVM 上跑测试）
+        classpath "org.jetbrains.kotlin:kotlin-serialization:1.9.22"
+        classpath "app.cash.sqldelight:gradle-plugin:2.0.1"
     }
 }
 

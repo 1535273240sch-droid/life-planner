@@ -1,0 +1,48 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'app.cash.sqldelight'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+sqldelight {
+    databases {
+        create("LifePlannerDb") {
+            packageName.set("com.lifeplanner.core.db")
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3"
+    // 日期处理：纯 Kotlin，JVM 与 Android 行为一致，且可在本机测试（不用 java.time，避开 minSdk 限制）
+    api "org.jetbrains.kotlinx:kotlinx-datetime:0.4.1"
+
+    // api：仓储实现位于本模块，但生成的 Database/表类型要暴露给 app
+    api "app.cash.sqldelight:runtime:2.0.1"
+    implementation "app.cash.sqldelight:coroutines-extensions:2.0.1"
+
+    testImplementation "junit:junit:4.13.2"
+    // JVM 版的 SQLite 驱动：让数据层也能在本机（不装安卓 SDK）跑单元测试
+    testImplementation "app.cash.sqldelight:sqlite-driver:2.0.1"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3"
+}
+
+test {
+    useJUnit()
+    testLogging {
+        events "passed", "failed", "skipped"
+        exceptionFormat "full"
+    }
+}

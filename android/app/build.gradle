@@ -11,8 +11,8 @@ android {
         applicationId "com.lifeplanner.ai"
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName "1.1.0"
+        versionCode 3
+        versionName "2.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -30,20 +30,54 @@ android {
     kotlinOptions {
         jvmTarget = '17'
     }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+    }
     buildFeatures {
-        viewBinding true
+        compose true
+    }
+    composeOptions {
+        // 必须与 Kotlin 1.9.22 匹配
+        kotlinCompilerExtensionVersion '1.5.8'
     }
 }
 
 dependencies {
+    // v2：业务内核（纯 Kotlin，可在本机跑单元测试）
+    implementation project(':core')
+
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'androidx.webkit:webkit:1.10.0'
-    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+
+    // Jetpack Compose（原生界面）
+    def composeBom = platform('androidx.compose:compose-bom:2024.02.00')
+    implementation composeBom
+    androidTestImplementation composeBom
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation 'androidx.navigation:navigation-compose:2.7.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0'
+
+    // 本地数据库（SQLDelight 的安卓驱动；表与查询定义在 core）
+    implementation 'app.cash.sqldelight:android-driver:2.0.1'
+    // 网络：app 负责实现 core 的 HttpTransport
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'
+
+    debugImplementation 'androidx.compose.ui:ui-tooling'
 
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.11.1'
+    testImplementation 'androidx.test:core:1.5.0'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }

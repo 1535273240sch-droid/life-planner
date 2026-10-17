@@ -1,2 +1,4 @@
 rootProject.name = "LifePlannerAI"
 include ':app'
+// v2：纯 Kotlin 业务内核（无 Android 依赖，可用 :core:test 在本机验证）
+include ':core'
