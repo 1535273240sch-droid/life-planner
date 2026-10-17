@@ -6,8 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.lifeplanner.ai.AppContainer
 import com.lifeplanner.ai.data.AiConfigRules
 import com.lifeplanner.ai.data.AiProvider
+import com.lifeplanner.ai.data.UpdatePrefs
 import com.lifeplanner.ai.net.ModelListClient
 import com.lifeplanner.ai.net.ModelListException
+import com.lifeplanner.ai.net.UpdateChecker
+import com.lifeplanner.ai.net.UpdateInfo
+import com.lifeplanner.ai.net.appVersionName
 import com.lifeplanner.ai.notify.PushAlarmScheduler
 import com.lifeplanner.ai.notify.PushNotifier
 import com.lifeplanner.core.ai.AiConfig
@@ -53,6 +57,12 @@ data class SettingsUiState(
     val importSummary: ImportSummary? = null,
     /** 每日推送配置（两个时段是否开启、各自的时分） */
     val pushConfig: PushConfig = PushConfig(),
+    /** 手动检查更新进行中 */
+    val updateChecking: Boolean = false,
+    /** 手动检查发现的新版本（非空时设置页弹更新对话框） */
+    val updateInfo: UpdateInfo? = null,
+    /** 手动检查的一次性提示（已是最新 / 检查失败） */
+    val updateMessage: String? = null,
 )
 
 /**
@@ -311,6 +321,47 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
                 _state.update { it.copy(busy = false, error = "清空失败：${readable(e)}") }
             }
         }
+    }
+
+    // ---------------------------------------------------------------- 版本与更新
+
+    /**
+     * 手动检查更新（设置页按钮）。
+     * 自动检查在 UpdateHost 里；这里只负责给用户一个"我现在就想确认"的入口。
+     */
+    fun checkUpdate() {
+        if (_state.value.updateChecking) return
+        _state.update { it.copy(updateChecking = true, updateInfo = null, updateMessage = null) }
+        viewModelScope.launch {
+            try {
+                val current = appVersionName(container.appContext)
+                val info = withContext(Dispatchers.IO) { UpdateChecker.check(current) }
+                // 手动检查过就顺带重置 24 小时计时；发现新版本也标记已提示，避免下次启动再弹。
+                UpdatePrefs(container.appContext).apply {
+                    markChecked()
+                    if (info != null) markPrompted(info.version)
+                }
+                _state.update {
+                    it.copy(
+                        updateChecking = false,
+                        updateInfo = info,
+                        updateMessage = if (info == null) "已是最新版本（v" + current + "）" else null,
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(updateChecking = false, updateMessage = "检查更新失败，请检查网络后重试")
+                }
+            }
+        }
+    }
+
+    fun dismissUpdate() {
+        _state.update { it.copy(updateInfo = null) }
+    }
+
+    fun consumeUpdateMessage() {
+        _state.update { it.copy(updateMessage = null) }
     }
 
     // ---------------------------------------------------------------- 每日推送

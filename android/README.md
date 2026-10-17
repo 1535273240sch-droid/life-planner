@@ -1,6 +1,6 @@
 # 人生智能编排体 (Life Planner AI) - Android 工程
 
-包名 `com.lifeplanner.ai`，当前版本 `2.2.0`（versionCode 9）。
+包名 `com.lifeplanner.ai`，当前版本 `2.3.0`（versionCode 10）。
 
 v2.0.0 起这是**完全自包含的原生 Android 应用**：Kotlin + Jetpack Compose + 手机本地 SQLite（SQLDelight）。
 不再使用 WebView，不再需要电脑端 FastAPI 服务，也不加载任何 CDN 资源。
@@ -26,6 +26,7 @@ android/
 │       ├── ui/                 # 7 个 Compose 页面、通用组件、Aurora Ink 主题、导航
 │       ├── ui/dashboard/CaptureSheet.kt  # 首页「一句话整理」弹窗
 │       ├── ui/interview/       # AI 建档访谈（聊天式提问 + 草稿确认）
+│       ├── ui/update/          # 启动检查 GitHub Release + 更新提示
 │       ├── notify/             # 每日推送（渠道/闹钟/开机重排/通知导航）
 │       ├── data/SettingsStore.kt
 │       └── net/OkHttpTransport.kt
@@ -80,7 +81,7 @@ Windows 下也可以双击 `build_apk.bat`。
 
 ```bash
 ./gradlew :core:test              # 138 个纯 JVM 单元测试
-./gradlew :app:testDebugUnitTest  # 14 个 Robolectric 测试（建库/仓储/备份/AI 错误路径/MainActivity 启动）
+./gradlew :app:testDebugUnitTest  # 18 个测试（建库/仓储/备份/AI 错误路径/MainActivity 启动/版本比较）
 ```
 
 ### GitHub Actions

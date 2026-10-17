@@ -1,5 +1,38 @@
 # 🚀 人生智能编排体 (Life Planner AI) 版本发布日志
 
+## [v2.3.0] - 2026-10-17 自动更新提示 + 推送仓库即发布
+
+这一版解决"以后有新版本怎么让用户知道"的问题：应用会自己发现新版本并提示，
+而发布流程只需要**改版本号 + 推送仓库**。
+
+### 新增：应用内更新提示
+1. 打开应用时（24 小时最多一次）只读查询公开仓库的 `releases/latest`，不需要任何令牌，
+   应用里也**不内置任何 GitHub 凭据**。
+2. 发现更高版本时弹窗：版本号、更新说明摘要、「去下载」（直接打开 APK 资产，缺失时打开 Release 页）、
+   「以后再说」；同一版本只自动提示一次。
+3. 网络失败/仓库暂无 Release/尚未登录 GitHub 时完全静默，不影响打开应用。
+4. 设置页新增「关于」：显示当前版本 + 手动「检查更新」。
+
+### 新增：CI 自动发布
+1. GitHub Actions 在每次推送 `main` 后读取 `android/app/build.gradle` 的 `versionName`，
+   自动创建（或更新）`vX.Y.Z` Release 并上传 Debug APK，同时把该 Release 标记为 latest。
+2. 因此以后发版只需要：
+   ```
+   改 android/app/build.gradle: versionCode +1、versionName 改成新版本
+   git commit && git push
+   ```
+   已安装旧版的用户下次打开应用就会看到更新提示。
+3. 版本号没变时不会重复创建 Release，只覆盖同一个 Release 的 APK 资产。
+
+### 版本与验证
+- `versionCode 10`、`versionName 2.3.0`。
+- `:core:test` 138 项、`:app:testDebugUnitTest` 18 项（新增 4 个版本比较用例）全部通过；
+  `:app:assembleDebug` 成功。
+- 说明：更新检查只覆盖"公开仓库 + Release 资产"这一条路径；如果以后仓库改成私有，
+  需要改为带鉴权的分发方式（不要用个人 token 硬编码进 App）。
+
+---
+
 ## [v2.2.0] - 2026-10-17 建档访谈 + 暖色手账界面 + 布局重叠修复
 
 这一版是针对真实使用反馈的返工：把「AI 味太重」的视觉拉回安静的手账感，

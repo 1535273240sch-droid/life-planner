@@ -69,6 +69,7 @@ import com.lifeplanner.ai.ui.log.LogScreen
 import com.lifeplanner.ai.ui.profile.ProfileScreen
 import com.lifeplanner.ai.ui.review.ReviewScreen
 import com.lifeplanner.ai.ui.settings.SettingsScreen
+import com.lifeplanner.ai.ui.update.UpdateHost
 import com.lifeplanner.ai.ui.theme.LpColors
 import kotlinx.coroutines.flow.StateFlow
 
@@ -238,6 +239,7 @@ fun LifePlannerRoot(
                 }
             }
         }
+        UpdateHost()
     }
 }
 

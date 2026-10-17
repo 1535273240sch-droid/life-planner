@@ -60,6 +60,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeplanner.ai.AppContainer
 import com.lifeplanner.ai.data.AiConfigRules
 import com.lifeplanner.ai.data.AiProviders
+import com.lifeplanner.ai.net.appVersionName
+import com.lifeplanner.ai.net.openUpdate
 import com.lifeplanner.ai.notify.PushPermissions
 import com.lifeplanner.ai.ui.NavTarget
 import com.lifeplanner.ai.ui.appViewModel
@@ -448,6 +450,43 @@ fun SettingsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                     onClick = vm::sendTestPush,
                     enabled = !state.busy,
                 )
+            }
+
+            // ---- 版本与更新 ----
+            LpCard {
+                LpSectionTitle("关于")
+                Spacer(Modifier.height(LpSpacing.sm))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "人生智能规划 v" + versionName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LpColors.TextPrimary,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "新版本发布后，打开应用会自动提示更新",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LpColors.TextMuted,
+                        )
+                    }
+                    SecondaryButton(
+                        text = if (state.updateChecking) "检查中…" else "检查更新",
+                        onClick = vm::checkUpdate,
+                        enabled = !state.updateChecking && !state.busy,
+                    )
+                }
+                state.updateMessage?.let { message ->
+                    Spacer(Modifier.height(LpSpacing.sm))
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LpColors.TextMuted,
+                    )
+                }
             }
 
             // ---- 导入导出 ----

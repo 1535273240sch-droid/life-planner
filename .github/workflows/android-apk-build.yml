@@ -39,12 +39,38 @@ jobs:
         working-directory: android
         run: gradle assembleDebug --stacktrace
 
+      - name: Resolve app version
+        id: appver
+        working-directory: android
+        run: |
+          VERSION=$(grep -m1 'versionName' app/build.gradle | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: LifePlannerAI-Android-APK
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
+
+      # 关键：每次推送 main 都按 build.gradle 的 versionName 自动打 tag 并发布 Release。
+      # App 的更新检查读的就是 releases/latest，所以"把新版本传到仓库"即可触发更新提示。
+      # 版本号没变时只覆盖同一个 Release 的 APK 资产，不会重复创建。
+      - name: Publish release on branch push
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.appver.outputs.name }}"
+          APK=$(ls android/app/build/outputs/apk/debug/*.apk | head -n 1)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+            gh release edit "$TAG" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$TAG" "$APK" --title "$TAG" --notes-file RELEASE_NOTES.md --latest
+          fi
+          echo "Published release $TAG"
 
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
