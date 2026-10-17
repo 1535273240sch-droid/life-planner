@@ -11,14 +11,30 @@ android {
         applicationId "com.lifeplanner.ai"
         minSdk 24
         targetSdk 34
-        versionCode 10
-        versionName "2.3.0"
+        versionCode 11
+        versionName "2.3.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        // 自用稳定签名：CI 与本机构建共用同一把钥匙，保证新 APK 能覆盖安装旧 APK。
+        // 注意：这是个人自用分发钥（密码写在仓库里），不是应用商店上架密钥；
+        // 若将来要发布到商店/公开分发，请换成自己的私钥并放到 CI Secrets 中。
+        stable {
+            storeFile file("../keystore/lifeplanner.jks")
+            storePassword "lifeplanner2026"
+            keyAlias "lifeplanner"
+            keyPassword "lifeplanner2026"
+        }
+    }
     buildTypes {
+        debug {
+            // debug 也用它：本机安装的包与 Release APK 签名一致，可以直接互相覆盖。
+            signingConfig signingConfigs.stable
+        }
         release {
+            signingConfig signingConfigs.stable
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

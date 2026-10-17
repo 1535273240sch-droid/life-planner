@@ -1,5 +1,25 @@
 # 🚀 人生智能编排体 (Life Planner AI) 版本发布日志
 
+## [v2.3.1] - 2026-10-17 稳定签名（让自动更新真的能覆盖安装）
+
+### 修复
+1. **内置自用签名密钥** `android/keystore/lifeplanner.jks`：debug 与 release 都用它签名，
+   CI 构建与本机构建签名一致。此前每次 CI 都生成临时 debug keystore，新 APK 与旧 APK
+   签名不同，用户点更新后会安装失败。
+2. 自动更新链路现在完整：推送仓库 → CI 出包（同一签名）→ App 提示 → 下载安装覆盖成功。
+3. 说明：从 2.3.0 之前的旧 debug 签名升级到本版，需要**卸载一次**再安装；
+   之后的所有版本都能直接覆盖安装。卸载前可在「设置 → 导出」备份，重装后导入。
+
+### 版本
+- `versionCode 11`、`versionName 2.3.1`。
+- 证书 SHA-256：`1f41408a5a6bf3e7f8b866e2760e1fc884efda2a418f0da7061829cf1a688cd8`。
+
+### 验证
+- `:app:assembleDebug` 成功；`apksigner verify --print-certs` 确认使用上述证书；
+- `:core:test` 138 项、`:app:testDebugUnitTest` 18 项全部通过。
+
+---
+
 ## [v2.3.0] - 2026-10-17 自动更新提示 + 推送仓库即发布
 
 这一版解决"以后有新版本怎么让用户知道"的问题：应用会自己发现新版本并提示，
