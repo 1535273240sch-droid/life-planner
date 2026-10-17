@@ -1,5 +1,21 @@
 # 🚀 人生智能编排体 (Life Planner AI) 版本发布日志
 
+## [v2.0.1] - 2026-10-17 启动闪退修复
+
+### 修复
+1. **Android 7.x（API 24/25）启动闪退**：`kotlinx-datetime` 在 Android 上依赖 `java.time`，而 `java.time` 直到 Android 8.0（API 26）才内置。此前 `minSdk` 为 24 且未开启脱糖，导致旧系统首次进入总览页调用日期逻辑时直接崩溃。
+   现已在 `app/build.gradle` 开启 **core library desugaring**（`desugar_jdk_libs 2.0.4`），把 `java.time` 打包进 APK，Android 7.0 起可正常运行。
+2. **新增启动崩溃记录页**：若仍然发生未捕获异常，应用会把设备型号、系统版本与完整堆栈写入应用私有文件；下次启动时用系统原生控件展示，并提供「复制错误信息」按钮，方便把真实原因反馈出来。该记录不包含用户数据或 API Key。
+
+### 版本
+- `versionCode 4`、`versionName 2.0.1`。
+
+### 验证
+- `:core:test` 96 个单测通过；`:app:testDebugUnitTest` 通过；`assembleDebug` 成功。
+- 已检查 APK 内的 `java.time` 引用全部被脱糖为 `j$.time`，旧系统不再依赖平台实现。
+
+---
+
 ## [v2.0.0] - 2026-10-17 原生重写版（完全自包含）
 
 这是手机端的第二次重写：**不再依赖电脑后端、不再使用 WebView**。APK 内打包了全部业务逻辑与本地数据库，安装后即可离线使用（AI 功能除外，需要你自己的 OpenAI 兼容 API Key）。

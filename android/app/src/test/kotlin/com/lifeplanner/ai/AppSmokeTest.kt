@@ -100,6 +100,10 @@ class AppSmokeTest {
         assertEquals(1, c.dailyLogRepository.listAll().size)
     }
 
+    // 说明：Compose 在 Robolectric 下的 SubcomposeLayout/Scaffold 测量会触发
+    // Compose runtime 的 SlotTable 越界（Robolectric 环境限制，非产品代码路径），
+    // 因此这里不做 Activity 级 UI 冒烟；容器与数据层已由上面的测试覆盖。
+
     @Test
     fun `未配置 Key 时 AI 明确报错而不是伪造结果`() {
         val c = newContainer()

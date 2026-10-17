@@ -11,8 +11,8 @@ android {
         applicationId "com.lifeplanner.ai"
         minSdk 24
         targetSdk 34
-        versionCode 3
-        versionName "2.0.0"
+        versionCode 4
+        versionName "2.0.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -24,6 +24,8 @@ android {
         }
     }
     compileOptions {
+        // kotlinx-datetime 在 Android 上走 java.time；API 24/25 没有它，必须脱糖。
+        coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
@@ -47,6 +49,9 @@ android {
 dependencies {
     // v2：业务内核（纯 Kotlin，可在本机跑单元测试）
     implementation project(':core')
+
+    // java.time 脱糖（Android 7.x 支持）
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
 
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'

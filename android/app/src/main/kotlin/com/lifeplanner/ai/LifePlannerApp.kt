@@ -92,6 +92,8 @@ class LifePlannerApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // 先装崩溃记录，再创建容器：容器初始化失败也能留下堆栈。
+        CrashLogger.install(this)
         container = AppContainer(this)
     }
 }
