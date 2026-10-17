@@ -36,6 +36,8 @@ data class SettingsUiState(
     val fetchingModels: Boolean = false,
     /** 拉取到的模型 id；点击后填入模型名称 */
     val modelOptions: List<String> = emptyList(),
+    /** 允许把 API Key 以明文发往公网 http（需用户显式勾选） */
+    val allowInsecureHttp: Boolean = false,
     /** 已读入内存、等待用户二次确认的备份文本；非空时界面弹确认框 */
     val pendingImportText: String? = null,
     /** 最近一次导入的统计 */
@@ -65,6 +67,8 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
                         apiKey = config.apiKey,
                         baseUrl = config.baseUrl,
                         model = config.model,
+                        // 已保存的是公网 http 时，保持开关打开并显示警告，避免用户困惑。
+                        allowInsecureHttp = AiConfigRules.isPublicHttp(config.baseUrl),
                     )
                 }
             } catch (e: Exception) {
@@ -86,6 +90,10 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun onModelChange(value: String) {
         _state.update { it.copy(model = value) }
+    }
+
+    fun onAllowInsecureHttpChange(value: Boolean) {
+        _state.update { it.copy(allowInsecureHttp = value, error = null) }
     }
 
     /** 选择服务商预设：只填表单，不发网络请求。 */
@@ -110,7 +118,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         val current = _state.value
         if (current.fetchingModels || current.busy) return
         val baseUrl = AiConfigRules.normalizeBaseUrl(current.baseUrl)
-        val urlError = AiConfigRules.baseUrlError(current.baseUrl)
+        val urlError = AiConfigRules.baseUrlError(current.baseUrl, current.allowInsecureHttp)
         if (urlError != null) {
             _state.update { it.copy(error = urlError, message = null) }
             return
@@ -132,7 +140,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
             }
             try {
                 val models = withContext(Dispatchers.IO) {
-                    modelListClient.fetchModels(baseUrl, current.apiKey)
+                    modelListClient.fetchModels(baseUrl, current.apiKey, current.allowInsecureHttp)
                 }
                 _state.update {
                     it.copy(
@@ -158,7 +166,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         val baseUrl = AiConfigRules.normalizeBaseUrl(current.baseUrl)
         val apiKey = AiConfigRules.normalizeApiKey(current.apiKey)
         val model = current.model.trim()
-        val baseUrlError = AiConfigRules.baseUrlError(current.baseUrl)
+        val baseUrlError = AiConfigRules.baseUrlError(current.baseUrl, current.allowInsecureHttp)
         val validation = when {
             baseUrlError != null -> baseUrlError
             model.isEmpty() -> "模型名称不能为空"

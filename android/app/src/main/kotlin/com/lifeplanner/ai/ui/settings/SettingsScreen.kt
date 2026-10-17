@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeplanner.ai.AppContainer
+import com.lifeplanner.ai.data.AiConfigRules
 import com.lifeplanner.ai.data.AiProviders
 import com.lifeplanner.ai.ui.NavTarget
 import com.lifeplanner.ai.ui.appViewModel
@@ -216,6 +218,26 @@ fun SettingsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                     enabled = !state.busy,
                     placeholder = "https://api.openai.com/v1",
                 )
+                if (AiConfigRules.isPublicHttp(state.baseUrl)) {
+                    Spacer(Modifier.height(LpSpacing.sm))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = state.allowInsecureHttp,
+                            onCheckedChange = vm::onAllowInsecureHttpChange,
+                            enabled = !state.busy,
+                        )
+                        Text(
+                            text = "允许公网 HTTP（不推荐）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LpColors.Warning,
+                        )
+                    }
+                    LpHint(
+                        "开启后 API Key 会以明文经过网络传输。只有在你完全信任该网络与服务端时才使用；" +
+                            "能改用 https 就优先用 https。",
+                        warn = true,
+                    )
+                }
                 Spacer(Modifier.height(LpSpacing.md))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.weight(1f)) {

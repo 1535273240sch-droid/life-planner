@@ -3,6 +3,7 @@ package com.lifeplanner.ai
 import com.lifeplanner.ai.data.AiConfigRules
 import com.lifeplanner.ai.data.AiProviders
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -52,6 +53,30 @@ class AiConfigRulesTest {
     fun `http 局域网地址通过`() {
         assertNull(AiConfigRules.baseUrlError("http://192.168.1.5:11434/v1"))
         assertNull(AiConfigRules.baseUrlError("http://127.0.0.1:8000/v1"))
+        assertNull(AiConfigRules.baseUrlError("http://[::1]:8000/v1"))
+    }
+
+    @Test
+    fun `Tailscale 与 IPv6 局域网地址通过`() {
+        // Tailscale / CGNAT
+        assertNull(AiConfigRules.baseUrlError("http://100.100.1.2:11434/v1"))
+        // IPv6 链路本地 / ULA
+        assertNull(AiConfigRules.baseUrlError("http://[fe80::1]:8000/v1"))
+        assertNull(AiConfigRules.baseUrlError("http://[fd00::1]:8000/v1"))
+        // mDNS
+        assertNull(AiConfigRules.baseUrlError("http://my-pc.local:8000/v1"))
+        // 链路本地 IPv4
+        assertNull(AiConfigRules.baseUrlError("http://169.254.1.2:8000/v1"))
+    }
+
+    @Test
+    fun `公网 http 默认拒绝但允许用户显式放行`() {
+        assertNotNull(AiConfigRules.baseUrlError("http://api.example.com/v1"))
+        assertNull(AiConfigRules.baseUrlError("http://api.example.com/v1", allowPublicHttp = true))
+
+        assertTrue(AiConfigRules.isPublicHttp("http://api.example.com/v1"))
+        assertFalse(AiConfigRules.isPublicHttp("http://192.168.1.5/v1"))
+        assertFalse(AiConfigRules.isPublicHttp("https://api.example.com/v1"))
     }
 
     @Test

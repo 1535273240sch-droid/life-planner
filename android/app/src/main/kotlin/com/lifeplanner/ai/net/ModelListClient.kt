@@ -22,9 +22,9 @@ class ModelListClient {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun fetchModels(baseUrl: String, apiKey: String): List<String> {
+    fun fetchModels(baseUrl: String, apiKey: String, allowPublicHttp: Boolean = false): List<String> {
         val normalized = AiConfigRules.normalizeBaseUrl(baseUrl)
-        AiConfigRules.baseUrlError(normalized)?.let { throw ModelListException(it) }
+        AiConfigRules.baseUrlError(normalized, allowPublicHttp)?.let { throw ModelListException(it) }
         if (apiKey.isBlank()) throw ModelListException("请先填写 API Key")
 
         val client = OkHttpClient.Builder()
