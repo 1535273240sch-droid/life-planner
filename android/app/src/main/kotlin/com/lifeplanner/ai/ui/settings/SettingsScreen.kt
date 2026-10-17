@@ -4,6 +4,7 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,8 +61,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeplanner.ai.AppContainer
 import com.lifeplanner.ai.data.AiConfigRules
 import com.lifeplanner.ai.data.AiProviders
+import com.lifeplanner.ai.net.UpdateChecker
 import com.lifeplanner.ai.net.appVersionName
 import com.lifeplanner.ai.net.openUpdate
+import com.lifeplanner.ai.net.openUrl
 import com.lifeplanner.ai.notify.PushPermissions
 import com.lifeplanner.ai.ui.NavTarget
 import com.lifeplanner.ai.ui.appViewModel
@@ -485,6 +488,37 @@ fun SettingsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                         text = message,
                         style = MaterialTheme.typography.bodySmall,
                         color = LpColors.TextMuted,
+                    )
+                }
+
+                Spacer(Modifier.height(LpSpacing.md))
+                LpDivider()
+                Spacer(Modifier.height(LpSpacing.sm))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { openUrl(context, UpdateChecker.REPO_URL) }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "开源仓库",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LpColors.TextPrimary,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = UpdateChecker.REPO_URL,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LpColors.TextMuted,
+                            maxLines = 1,
+                        )
+                    }
+                    Text(
+                        text = "↗",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = LpColors.Accent,
                     )
                 }
             }

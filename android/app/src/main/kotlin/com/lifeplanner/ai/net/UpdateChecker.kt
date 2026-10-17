@@ -35,6 +35,12 @@ object UpdateChecker {
     private const val OWNER = "1535273240sch-droid"
     private const val REPO = "life-planner"
 
+    /** 仓库地址：设置页「关于」里展示并可点击打开。 */
+    const val REPO_URL = "https://github.com/1535273240sch-droid/life-planner"
+
+    /** Release 列表页。 */
+    const val RELEASES_URL = REPO_URL + "/releases"
+
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
