@@ -4,6 +4,10 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lifeplanner.ai.AppContainer
+import com.lifeplanner.ai.data.AiConfigRules
+import com.lifeplanner.ai.data.AiProvider
+import com.lifeplanner.ai.net.ModelListClient
+import com.lifeplanner.ai.net.ModelListException
 import com.lifeplanner.core.ai.AiConfig
 import com.lifeplanner.core.json.ImportMode
 import com.lifeplanner.core.json.ImportSummary
@@ -14,7 +18,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.URI
 
 data class SettingsUiState(
     val loading: Boolean = true,
@@ -27,6 +30,12 @@ data class SettingsUiState(
     val message: String? = null,
     /** 可读错误，保留到下一次操作 */
     val error: String? = null,
+    /** 当前选中的服务商预设 id */
+    val providerId: String? = null,
+    /** 正在从服务商拉取模型列表 */
+    val fetchingModels: Boolean = false,
+    /** 拉取到的模型 id；点击后填入模型名称 */
+    val modelOptions: List<String> = emptyList(),
     /** 已读入内存、等待用户二次确认的备份文本；非空时界面弹确认框 */
     val pendingImportText: String? = null,
     /** 最近一次导入的统计 */
@@ -43,6 +52,8 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
+
+    private val modelListClient = ModelListClient()
 
     fun load() {
         viewModelScope.launch {
@@ -69,19 +80,85 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun onBaseUrlChange(value: String) {
-        _state.update { it.copy(baseUrl = value) }
+        // 地址改了，旧的模型列表不再可信。
+        _state.update { it.copy(baseUrl = value, modelOptions = emptyList()) }
     }
 
     fun onModelChange(value: String) {
         _state.update { it.copy(model = value) }
     }
 
+    /** 选择服务商预设：只填表单，不发网络请求。 */
+    fun selectProvider(provider: AiProvider) {
+        _state.update {
+            it.copy(
+                providerId = provider.id,
+                baseUrl = if (provider.baseUrl.isNotBlank()) provider.baseUrl else it.baseUrl,
+                model = if (provider.defaultModel.isNotBlank()) provider.defaultModel else it.model,
+                modelOptions = emptyList(),
+                error = null,
+                message = null,
+            )
+        }
+    }
+
+    /**
+     * 拉取 `GET {baseUrl}/models`，同时起到“测试连接”的作用。
+     * 成功后可点模型名直接填入；失败显示服务端返回的具体原因（401/404/超时等）。
+     */
+    fun fetchModels() {
+        val current = _state.value
+        if (current.fetchingModels || current.busy) return
+        val baseUrl = AiConfigRules.normalizeBaseUrl(current.baseUrl)
+        val urlError = AiConfigRules.baseUrlError(current.baseUrl)
+        if (urlError != null) {
+            _state.update { it.copy(error = urlError, message = null) }
+            return
+        }
+        if (current.apiKey.isBlank()) {
+            _state.update { it.copy(error = "请先填写 API Key", message = null) }
+            return
+        }
+
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    fetchingModels = true,
+                    error = null,
+                    message = null,
+                    modelOptions = emptyList(),
+                    baseUrl = baseUrl,
+                )
+            }
+            try {
+                val models = withContext(Dispatchers.IO) {
+                    modelListClient.fetchModels(baseUrl, current.apiKey)
+                }
+                _state.update {
+                    it.copy(
+                        fetchingModels = false,
+                        modelOptions = models,
+                        model = if (it.model.isBlank() || it.model !in models) models.first() else it.model,
+                        message = "已获取 ${models.size} 个模型，点下方模型名可切换",
+                    )
+                }
+            } catch (e: ModelListException) {
+                _state.update { it.copy(fetchingModels = false, error = e.message) }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(fetchingModels = false, error = "获取模型列表失败：${readable(e)}")
+                }
+            }
+        }
+    }
+
     /** 校验并保存 AI 配置。AppContainer.aiService() 每次调用都读取设置，因此保存后立即生效。 */
     fun saveConfig() {
         val current = _state.value
-        val baseUrl = current.baseUrl.trim()
+        val baseUrl = AiConfigRules.normalizeBaseUrl(current.baseUrl)
+        val apiKey = AiConfigRules.normalizeApiKey(current.apiKey)
         val model = current.model.trim()
-        val baseUrlError = validateBaseUrl(baseUrl)
+        val baseUrlError = AiConfigRules.baseUrlError(current.baseUrl)
         val validation = when {
             baseUrlError != null -> baseUrlError
             model.isEmpty() -> "模型名称不能为空"
@@ -99,7 +176,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
                 // 保存后重新读取，反映 SettingsStore 的规范化结果（去尾斜杠 / 空值回落默认）
                 val saved = withContext(Dispatchers.IO) {
                     container.settings.saveAiConfig(
-                        AiConfig(apiKey = current.apiKey, baseUrl = baseUrl, model = model),
+                        AiConfig(apiKey = apiKey, baseUrl = baseUrl, model = model),
                     )
                     container.settings.loadAiConfig()
                 }
@@ -217,55 +294,4 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun readable(e: Throwable): String =
         e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
-
-    /**
-     * Base URL 安全校验：
-     * - https:// 允许任意合法主机（Key 走 TLS）；
-     * - http:// 只允许本机 / 私有网段，避免 API Key 以 Bearer 明文发往公网；
-     * - 空串、非法 URL、其他 scheme 一律拒绝。返回 null 表示通过。
-     */
-    private fun validateBaseUrl(raw: String): String? {
-        if (raw.isEmpty()) return "Base URL 不能为空"
-        val uri = try {
-            URI(raw)
-        } catch (e: Exception) {
-            return "Base URL 格式不正确"
-        }
-        val scheme = uri.scheme?.lowercase()
-            ?: return "Base URL 必须以 https:// 或 http:// 开头"
-        val host = uri.host
-            ?: return "Base URL 缺少主机名或格式不正确"
-        return when (scheme) {
-            "https" ->
-                if (host.isNotBlank()) null else "Base URL 缺少主机名"
-            "http" ->
-                if (isLocalOrPrivateHost(host)) {
-                    null
-                } else {
-                    "http 仅支持本机/局域网地址（localhost、127.0.0.1、10.x.x.x、" +
-                        "172.16-31.x.x、192.168.x.x、::1）；公网请使用 https"
-                }
-            else -> "Base URL 仅支持 http:// 或 https://"
-        }
-    }
-
-    /** 只接受明确列出的本机/私有地址，不做域名后缀或字符串包含判断。 */
-    private fun isLocalOrPrivateHost(host: String): Boolean {
-        val h = host.trim().removePrefix("[").removeSuffix("]").lowercase()
-        if (h == "localhost" || h == "127.0.0.1" || h == "::1") return true
-        val parts = h.split(".")
-        if (parts.size != 4) return false
-        val octets = IntArray(4)
-        for (i in 0 until 4) {
-            val value = parts[i].toIntOrNull() ?: return false
-            if (value !in 0..255) return false
-            octets[i] = value
-        }
-        return when {
-            octets[0] == 10 -> true
-            octets[0] == 172 && octets[1] in 16..31 -> true
-            octets[0] == 192 && octets[1] == 168 -> true
-            else -> false
-        }
-    }
 }

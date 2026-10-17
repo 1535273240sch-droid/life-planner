@@ -17,27 +17,21 @@ class SettingsStore(context: Context) {
     fun loadAiConfig(): AiConfig {
         val defaults = AiConfig()
         return AiConfig(
-            apiKey = prefs.getString(KEY_API_KEY, null) ?: "",
-            baseUrl = prefs.getString(KEY_BASE_URL, null)?.takeIf { it.isNotBlank() } ?: defaults.baseUrl,
-            model = prefs.getString(KEY_MODEL, null)?.takeIf { it.isNotBlank() } ?: defaults.model,
+            apiKey = AiConfigRules.normalizeApiKey(prefs.getString(KEY_API_KEY, null) ?: ""),
+            baseUrl = AiConfigRules.normalizeBaseUrl(prefs.getString(KEY_BASE_URL, null).orEmpty())
+                .ifBlank { defaults.baseUrl },
+            model = prefs.getString(KEY_MODEL, null)?.trim()?.takeIf { it.isNotBlank() } ?: defaults.model,
         )
     }
 
     fun saveAiConfig(config: AiConfig) {
+        val baseUrl = AiConfigRules.normalizeBaseUrl(config.baseUrl)
+            .ifBlank { AiConfig().baseUrl }
         prefs.edit()
-            .putString(KEY_API_KEY, config.apiKey.trim())
-            .putString(KEY_BASE_URL, normalizeBaseUrl(config.baseUrl))
+            .putString(KEY_API_KEY, AiConfigRules.normalizeApiKey(config.apiKey))
+            .putString(KEY_BASE_URL, baseUrl)
             .putString(KEY_MODEL, config.model.trim())
             .apply()
-    }
-
-    /** http(s):// 开头、去掉末尾斜杠；非法则回落到默认地址 */
-    private fun normalizeBaseUrl(raw: String): String {
-        val trimmed = raw.trim().trimEnd('/')
-        if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
-            return AiConfig().baseUrl
-        }
-        return trimmed
     }
 
     companion object {

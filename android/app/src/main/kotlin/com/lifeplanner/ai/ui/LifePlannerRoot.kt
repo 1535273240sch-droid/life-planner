@@ -2,6 +2,7 @@ package com.lifeplanner.ai.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
@@ -77,6 +78,9 @@ fun LifePlannerRoot(container: AppContainer) {
     }
 
     Scaffold(
+        // edge-to-edge 下窗口不会自动为输入法让位；不加这段时键盘会盖住底部导航，
+        // 用户点“总览/目标”实际点到的是键盘，看起来像卡在设置页。
+        modifier = Modifier.imePadding(),
         containerColor = LpColors.Background,
         topBar = {
             TopAppBar(

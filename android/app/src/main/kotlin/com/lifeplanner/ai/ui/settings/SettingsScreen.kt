@@ -4,17 +4,26 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -29,12 +38,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeplanner.ai.AppContainer
+import com.lifeplanner.ai.data.AiProviders
 import com.lifeplanner.ai.ui.NavTarget
 import com.lifeplanner.ai.ui.appViewModel
 import com.lifeplanner.ai.ui.components.LpCard
@@ -168,6 +179,27 @@ fun SettingsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
             // ---- AI 配置 ----
             LpCard {
                 LpSectionTitle("AI 配置")
+                Spacer(Modifier.height(LpSpacing.sm))
+                Text(
+                    text = "服务商（点选后自动填入地址和常用模型）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LpColors.TextMuted,
+                )
+                Spacer(Modifier.height(LpSpacing.xs))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(LpSpacing.sm)) {
+                    items(AiProviders.all) { provider ->
+                        FilterChip(
+                            selected = state.providerId == provider.id,
+                            onClick = { vm.selectProvider(provider) },
+                            enabled = !state.busy && !state.fetchingModels,
+                            label = { Text(provider.name) },
+                        )
+                    }
+                }
+                AiProviders.all.firstOrNull { it.id == state.providerId }?.note?.let { note ->
+                    Spacer(Modifier.height(LpSpacing.xs))
+                    LpHint(note)
+                }
                 Spacer(Modifier.height(LpSpacing.md))
                 SecretField(
                     value = state.apiKey,
@@ -185,16 +217,53 @@ fun SettingsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                     placeholder = "https://api.openai.com/v1",
                 )
                 Spacer(Modifier.height(LpSpacing.md))
-                LpOutlinedField(
-                    value = state.model,
-                    onValueChange = vm::onModelChange,
-                    label = "模型名称",
-                    enabled = !state.busy,
-                    placeholder = "gpt-4o-mini",
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        LpOutlinedField(
+                            value = state.model,
+                            onValueChange = vm::onModelChange,
+                            label = "模型名称",
+                            enabled = !state.busy,
+                            placeholder = "gpt-4o-mini",
+                        )
+                    }
+                    Spacer(Modifier.width(LpSpacing.sm))
+                    OutlinedButton(
+                        onClick = vm::fetchModels,
+                        enabled = !state.busy && !state.fetchingModels,
+                    ) {
+                        if (state.fetchingModels) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = LpColors.Accent,
+                            )
+                        } else {
+                            Text("获取模型")
+                        }
+                    }
+                }
+                if (state.modelOptions.isNotEmpty()) {
+                    Spacer(Modifier.height(LpSpacing.sm))
+                    Text(
+                        text = "点选模型即可填入：",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LpColors.TextMuted,
+                    )
+                    Spacer(Modifier.height(LpSpacing.xs))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(LpSpacing.sm)) {
+                        items(state.modelOptions) { modelId ->
+                            AssistChip(
+                                onClick = { vm.onModelChange(modelId) },
+                                label = { Text(modelId) },
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(LpSpacing.md))
                 LpHint(
-                    "Key 仅保存在本机应用私有目录（SharedPreferences），不内置任何 Key。" +
+                    "可只填域名（如 api.deepseek.com/v1），会自动补 https://。" +
+                        "Key 仅保存在本机应用私有目录（SharedPreferences），不内置任何 Key。" +
                         "AI 请求会直接发往上面填写的 Base URL，请确认你信任该服务商。" +
                         "http 仅支持本机/局域网地址；公网请使用 https。",
                 )
