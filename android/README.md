@@ -1,6 +1,6 @@
 # 人生智能编排体 (Life Planner AI) - Android 工程
 
-包名 `com.lifeplanner.ai`，当前版本 `2.0.1`（versionCode 4）。
+包名 `com.lifeplanner.ai`，当前版本 `2.0.2`（versionCode 5）。
 
 v2.0.0 起这是**完全自包含的原生 Android 应用**：Kotlin + Jetpack Compose + 手机本地 SQLite（SQLDelight）。
 不再使用 WebView，不再需要电脑端 FastAPI 服务，也不加载任何 CDN 资源。

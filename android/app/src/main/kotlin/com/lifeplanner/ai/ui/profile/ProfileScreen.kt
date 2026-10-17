@@ -80,8 +80,7 @@ fun ProfileScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
     ) {
         if (state.loading && !state.loaded) {
             LpLoading()
-            return@Column
-        }
+        } else {
 
         state.message?.let { message ->
             LpBadge(text = message, color = LpColors.Accent)
@@ -208,6 +207,7 @@ fun ProfileScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
         }
 
         Spacer(Modifier.height(LpSpacing.xl))
+        }
     }
 
     if (state.skillDialogOpen) {

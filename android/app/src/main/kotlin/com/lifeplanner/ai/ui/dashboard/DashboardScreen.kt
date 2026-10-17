@@ -118,8 +118,7 @@ fun DashboardScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                 LpEmptyState(title = "暂无总览数据", subtitle = "重试，或先去记录今天的状态")
                 LpPrimaryButton(text = "重试", onClick = { vm.refresh() })
             }
-            return@Column
-        }
+        } else {
 
         // 1. 顶部统计卡（2x2）
         Row(horizontalArrangement = Arrangement.spacedBy(LpSpacing.md)) {
@@ -307,6 +306,7 @@ fun DashboardScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
         }
 
         Spacer(Modifier.height(LpSpacing.sm))
+        }
     }
 }
 

@@ -1,5 +1,32 @@
 # 🚀 人生智能编排体 (Life Planner AI) 版本发布日志
 
+## [v2.0.2] - 2026-10-17 修复启动闪退（Compose 槽表越界）
+
+### 根因
+在 `@Composable` 函数或内容 lambda 中**提前 `return`** 会破坏 Compose 的槽表结构。首次组合时，`Scaffold` 的子组合在测量阶段收尾，触发：
+
+```
+java.lang.ArrayIndexOutOfBoundsException: length=0; index=-5
+    at androidx.compose.runtime.SlotTableKt.key
+    at androidx.compose.runtime.ComposerImpl.endRoot
+```
+
+表现为打开 App 立刻闪退（已在一加 PLC110 / Android 16 上复现）。
+
+### 修复
+1. `LpLineChart`（无数据时）、`RecentLogs`（空列表时）、`DashboardScreen` 与 `ProfileScreen` 的 `return@Column` 共 4 处提前返回，**全部改为 if/else 分支**，保持组合结构稳定。
+2. 新增 `MainActivity 能启动并进入首屏` 的 Robolectric 测试：修复前必现该崩溃，修复后通过，防止回归。
+
+### 版本
+- `versionCode 5`、`versionName 2.0.2`。
+
+### 验证
+- `:core:test` 96 个单测通过；
+- `:app:testDebugUnitTest` 4 个测试通过（含 Activity 启动）；
+- `:app:assembleDebug` 成功；CI 构建与 Release 发布成功。
+
+---
+
 ## [v2.0.1] - 2026-10-17 启动闪退修复
 
 ### 修复

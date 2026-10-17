@@ -50,14 +50,12 @@ fun LpLineChart(
     val allValues = series.flatMap { it.values }.filterNotNull()
     if (labels.isEmpty() || allValues.isEmpty()) {
         LpEmptyState(title = "暂无数据", subtitle = "记录几天后这里会出现趋势")
-        return
-    }
+    } else {
+        val minValue = minOf(0f, allValues.min())
+        val maxValue = allValues.max().let { if (it <= minValue) minValue + 1f else it }
+        val range = maxValue - minValue
 
-    val minValue = minOf(0f, allValues.min())
-    val maxValue = allValues.max().let { if (it <= minValue) minValue + 1f else it }
-    val range = maxValue - minValue
-
-    Column(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = modifier.fillMaxWidth()) {
         // 图例
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             for (s in series) {
@@ -147,6 +145,7 @@ fun LpLineChart(
                     color = LpColors.TextMuted,
                 )
             }
+        }
         }
     }
 }

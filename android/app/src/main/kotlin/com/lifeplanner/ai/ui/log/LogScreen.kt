@@ -474,10 +474,8 @@ private fun RecentLogs(
             title = "最近 7 天还没有记录",
             subtitle = "保存今天的记录后会显示在这里",
         )
-        return
-    }
-
-    for (log in logs) {
+    } else {
+        for (log in logs) {
         LpCard(
             modifier = Modifier.padding(bottom = LpSpacing.sm),
             onClick = { onClick(log.date) },
@@ -522,6 +520,7 @@ private fun RecentLogs(
                 )
             }
         }
+    }
     }
 }
 
