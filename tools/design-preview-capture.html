@@ -1,0 +1,72 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+:root{--bg:#07080C;--surface:#12141C;--hi:#191D28;--var:#222838;--border:rgba(255,255,255,.10);
+--accent:#8B7BFF;--teal:#2DD4BF;--pos:#34D399;--warn:#FBBF24;--info:#60A5FA;
+--t1:#F5F7FB;--t2:#C3C9D9;--t3:#8A93A8}
+body{width:390px;height:844px;background:var(--bg);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--t1);overflow:hidden;position:relative}
+.bg{position:absolute;inset:0;filter:blur(2px);opacity:.55}
+.bg .glow{position:absolute;border-radius:50%;filter:blur(60px)}
+.g1{width:320px;height:320px;top:-140px;left:-90px;background:rgba(124,92,255,.30)}
+.g2{width:300px;height:300px;top:260px;right:-140px;background:rgba(34,211,238,.14)}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:92%;border-radius:28px 28px 0 0;background:linear-gradient(180deg,#191D28,#101219 40%);border-top:1px solid rgba(255,255,255,.12);padding:10px 20px 18px;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,.6)}
+.handle{width:38px;height:4px;border-radius:2px;background:rgba(255,255,255,.22);margin:2px auto 14px}
+.head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+h2{font-size:21px;font-weight:800;letter-spacing:.2px}
+.sub{font-size:12px;color:var(--t3);margin-top:5px;line-height:1.5}
+.close{width:32px;height:32px;border-radius:16px;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:15px}
+.input{border-radius:16px;background:var(--var);border:1px solid rgba(139,123,255,.45);padding:13px 14px;font-size:13px;line-height:1.6;color:var(--t2);margin-bottom:10px;box-shadow:0 0 0 3px rgba(139,123,255,.08)}
+.chips{display:flex;gap:8px;margin-bottom:16px}
+.chip{font-size:11px;color:var(--t2);background:rgba(255,255,255,.05);border:1px solid var(--border);padding:6px 11px;border-radius:999px}
+.chip.on{color:#0A0B10;background:linear-gradient(135deg,#8B7BFF,#2DD4BF);border-color:transparent;font-weight:700}
+.reply{border-radius:16px;background:linear-gradient(135deg,rgba(139,123,255,.18),rgba(45,212,191,.08));border:1px solid rgba(139,123,255,.28);padding:12px 14px;margin-bottom:16px}
+.reply .rt{font-size:10.5px;letter-spacing:1px;color:var(--accent);font-weight:800;margin-bottom:6px}
+.reply .rb{font-size:12.5px;line-height:1.6;color:var(--t1)}
+.sec{display:flex;justify-content:space-between;align-items:center;margin:0 2px 8px}
+.sech{font-size:14px;font-weight:700}
+.secm{font-size:11px;color:var(--t3)}
+.tags{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px}
+.tg{font-size:11.5px;padding:6px 10px;border-radius:10px;background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.22);color:#A7F3D0}
+.tg.b{background:rgba(96,165,250,.10);border-color:rgba(96,165,250,.22);color:#BFDBFE}
+.tg.o{background:rgba(251,191,36,.10);border-color:rgba(251,191,36,.22);color:#FDE68A}
+.list{border-radius:16px;background:rgba(255,255,255,.03);border:1px solid var(--border);padding:2px 14px;margin-bottom:14px}
+.row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.row:last-child{border-bottom:0}
+.cb{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#8B7BFF,#2DD4BF);display:flex;align-items:center;justify-content:center;color:#07080C;font-size:11px;font-weight:900;flex:0 0 auto}
+.cb.off{background:transparent;border:1.5px solid rgba(255,255,255,.25);color:transparent}
+.rt2{flex:1;font-size:13px;line-height:1.4}
+.rm{font-size:10.5px;color:var(--t3);margin-top:3px}
+.footer{margin-top:auto;padding-top:12px;display:flex;gap:10px}
+.btn{flex:1;height:50px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:14.5px;font-weight:700}
+.btn.main{background:linear-gradient(135deg,#8B7BFF,#2DD4BF);color:#07080C;box-shadow:0 8px 24px rgba(109,92,255,.35)}
+.btn.ghost{flex:0 0 96px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--t2);font-weight:600;font-size:13px}
+</style></head><body>
+<div class="bg"><div class="glow g1"></div><div class="glow g2"></div></div>
+<div class="dim"></div>
+<div class="sheet">
+  <div class="handle"></div>
+  <div class="head">
+    <div><h2>AI 一句话整理</h2><div class="sub">随便说，AI 帮你记成生活记录、今日任务和目标</div></div>
+    <div class="close">✕</div>
+  </div>
+  <div class="input">今天学了 1 小时英语，晚上跑了 3 公里，心情不错；明天想把论文初稿写完。</div>
+  <div class="chips"><div class="chip on">今日复盘</div><div class="chip">明天的安排</div><div class="chip">随便问问</div></div>
+  <div class="reply">
+    <div class="rt">AI 回 应</div>
+    <div class="rb">今天学习与运动都完成了，状态在线。明早先把论文方法章节写完，再处理英语听力——把最难的放在精力最好的时段。</div>
+  </div>
+  <div class="sec"><div class="sech">整理出的记录</div><div class="secm">今日</div></div>
+  <div class="tags"><span class="tg">学习 60 分钟</span><span class="tg b">跑步 3 公里</span><span class="tg o">心情 4/5</span><span class="tg">完成：英语 + 跑步</span></div>
+  <div class="sec"><div class="sech">今日任务</div><div class="secm">2 项 · 默认全选</div></div>
+  <div class="list">
+    <div class="row"><div class="cb">✓</div><div class="rt2">论文初稿：完成方法章节<div class="rm">预计 90 分钟 · 毕业论文</div></div></div>
+    <div class="row"><div class="cb">✓</div><div class="rt2">英语听力 25 分钟<div class="rm">预计 25 分钟 · 英语提升</div></div></div>
+  </div>
+  <div class="sec"><div class="sech">新目标</div><div class="secm">1 个</div></div>
+  <div class="list">
+    <div class="row"><div class="cb off">✓</div><div class="rt2">本周完成论文初稿<div class="rm">周目标 · 学习 · 衡量：初稿 8000 字</div></div></div>
+  </div>
+  <div class="footer"><div class="btn ghost">重新整理</div><div class="btn main">保存到我的计划</div></div>
+</div>
+</body></html>

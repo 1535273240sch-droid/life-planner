@@ -1,5 +1,13 @@
 package com.lifeplanner.ai.ui.goals
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -48,14 +56,15 @@ import com.lifeplanner.ai.AppContainer
 import com.lifeplanner.ai.ui.NavTarget
 import com.lifeplanner.ai.ui.appViewModel
 import com.lifeplanner.ai.ui.components.LpBadge
-import com.lifeplanner.ai.ui.components.LpCard
+import com.lifeplanner.ai.ui.components.LpGlassCard
 import com.lifeplanner.ai.ui.components.LpEmptyState
 import com.lifeplanner.ai.ui.components.LpErrorBanner
 import com.lifeplanner.ai.ui.components.LpHint
 import com.lifeplanner.ai.ui.components.LpLoading
 import com.lifeplanner.ai.ui.components.LpOutlinedField
-import com.lifeplanner.ai.ui.components.LpSectionTitle
+import com.lifeplanner.ai.ui.components.LpSectionHeader
 import com.lifeplanner.ai.ui.components.LpSpacing
+import com.lifeplanner.ai.ui.components.lpStaggerIn
 import com.lifeplanner.ai.ui.theme.LpColors
 import com.lifeplanner.core.logic.GoalLogic
 import com.lifeplanner.core.model.Goal
@@ -88,8 +97,8 @@ fun GoalsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
             .padding(horizontal = 16.dp),
     ) {
         Spacer(Modifier.height(LpSpacing.sm))
-        LpSectionTitle(
-            text = "目标树",
+        LpSectionHeader(
+            title = "目标树",
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(
@@ -122,34 +131,73 @@ fun GoalsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(LpSpacing.sm))
-
-        when {
-            state.loading && state.tree.isEmpty() -> LpLoading()
-            state.error != null && state.tree.isEmpty() -> Unit
-            state.tree.isEmpty() -> LpEmptyState(
-                title = "还没有目标",
-                subtitle = "先创建一个愿景或长期目标",
-            )
-            else -> LazyColumn(
+        // 静默刷新时只显示 2dp 细进度条，不打断正在浏览的目标树（避免整块闪成 loading）。
+        AnimatedVisibility(
+            visible = state.refreshing,
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(180)),
+        ) {
+            LinearProgressIndicator(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 16.dp),
-            ) {
-                goalTreeItems(
-                    nodes = state.tree,
-                    depth = 0,
-                    collapsedIds = collapsedIds,
-                    onToggle = { id -> collapsed[id] = !(collapsed[id] ?: false) },
-                    onEdit = { editing = it },
-                    onDelete = { deleting = it },
-                    onProgress = { progressGoal = it },
-                    onBreakdown = { goal ->
-                        aiGoal = goal
-                        vm.startBreakdown(goal)
-                    },
+                    .padding(top = LpSpacing.sm)
+                    .height(2.dp),
+                color = LpColors.Accent,
+                trackColor = LpColors.SurfaceVariant,
+            )
+        }
+
+        Spacer(Modifier.height(LpSpacing.sm))
+
+        // 加载 → 内容用 220ms 淡入上移过渡；已有数据时保持内容态，不回到加载态。
+        val phase = when {
+            state.tree.isNotEmpty() -> GoalPhase.CONTENT
+            state.loading -> GoalPhase.LOADING
+            state.error != null -> GoalPhase.ERROR
+            else -> GoalPhase.EMPTY
+        }
+        AnimatedContent(
+            targetState = phase,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            transitionSpec = {
+                (fadeIn(tween(220)) + slideInVertically(tween(220)) { height -> height / 20 }) togetherWith
+                    fadeOut(tween(160))
+            },
+            label = "goals-content",
+        ) { currentPhase ->
+            when (currentPhase) {
+                // 有内容时保持列表：静默刷新不改写滚动位置与展开状态。
+                GoalPhase.CONTENT -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                ) {
+                    goalTreeItems(
+                        nodes = state.tree,
+                        depth = 0,
+                        collapsedIds = collapsedIds,
+                        counter = ItemCounter(),
+                        onToggle = { id -> collapsed[id] = !(collapsed[id] ?: false) },
+                        onEdit = { editing = it },
+                        onDelete = { deleting = it },
+                        onProgress = { progressGoal = it },
+                        onBreakdown = { goal ->
+                            aiGoal = goal
+                            vm.startBreakdown(goal)
+                        },
+                    )
+                }
+
+                GoalPhase.LOADING -> LpLoading()
+
+                // 错误态由上方 LpErrorBanner（含重试）承担，这里不再重复文案。
+                GoalPhase.ERROR -> Unit
+
+                GoalPhase.EMPTY -> LpEmptyState(
+                    title = "还没有目标",
+                    subtitle = "先创建一个愿景或长期目标",
                 )
             }
         }
@@ -248,10 +296,17 @@ fun GoalsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
 // 目标树
 // ---------------------------------------------------------------------------
 
+/** 列表项序号计数器：用于前 8 项的 40ms 错峰入场。 */
+private class ItemCounter(var value: Int = 0)
+
+/** 内容区状态：加载 / 错误 / 空 / 内容。用于 AnimatedContent 的平滑切换。 */
+private enum class GoalPhase { LOADING, ERROR, EMPTY, CONTENT }
+
 private fun LazyListScope.goalTreeItems(
     nodes: List<GoalNode>,
     depth: Int,
     collapsedIds: Set<Long>,
+    counter: ItemCounter,
     onToggle: (Long) -> Unit,
     onEdit: (Goal) -> Unit,
     onDelete: (Goal) -> Unit,
@@ -261,6 +316,7 @@ private fun LazyListScope.goalTreeItems(
     nodes.forEach { node ->
         val goal = node.goal
         val id = goal.id
+        val enterIndex = counter.value++
         val showChildren = node.children.isNotEmpty() && (id == null || id !in collapsedIds)
         item(key = "goal-${id ?: goal.hashCode()}") {
             val breakdownAction: (() -> Unit)? =
@@ -272,6 +328,7 @@ private fun LazyListScope.goalTreeItems(
             GoalRow(
                 node = node,
                 depth = depth,
+                enterIndex = enterIndex,
                 collapsed = !showChildren,
                 onToggle = { id?.let(onToggle) },
                 onEdit = { onEdit(goal) },
@@ -285,6 +342,7 @@ private fun LazyListScope.goalTreeItems(
                 nodes = node.children,
                 depth = depth + 1,
                 collapsedIds = collapsedIds,
+                counter = counter,
                 onToggle = onToggle,
                 onEdit = onEdit,
                 onDelete = onDelete,
@@ -299,6 +357,7 @@ private fun LazyListScope.goalTreeItems(
 private fun GoalRow(
     node: GoalNode,
     depth: Int,
+    enterIndex: Int,
     collapsed: Boolean,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
@@ -307,8 +366,18 @@ private fun GoalRow(
     onBreakdown: (() -> Unit)?,
 ) {
     val goal = node.goal
-    Box(modifier = Modifier.padding(start = (depth * 14).dp)) {
-        LpCard {
+    // 前 8 项按 40ms 错峰淡入（设计系统动效令牌）；进度条/百分比用 600ms 平滑过渡。
+    Box(
+        modifier = Modifier
+            .padding(start = (depth * 14).dp)
+            .lpStaggerIn(enterIndex),
+    ) {
+        val animatedProgress by animateFloatAsState(
+            targetValue = goal.progress.coerceIn(0, 100) / 100f,
+            animationSpec = tween(durationMillis = 600),
+            label = "goal-progress",
+        )
+        LpGlassCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (node.children.isNotEmpty()) {
                     Text(
@@ -339,7 +408,7 @@ private fun GoalRow(
                     Spacer(Modifier.height(6.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         LinearProgressIndicator(
-                            progress = goal.progress.coerceIn(0, 100) / 100f,
+                            progress = { animatedProgress },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(6.dp),
@@ -348,7 +417,7 @@ private fun GoalRow(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "${goal.progress}%",
+                            text = "${(animatedProgress * 100).roundToInt()}%",
                             style = MaterialTheme.typography.bodySmall,
                             color = LpColors.TextSecondary,
                         )
@@ -808,7 +877,7 @@ private fun BreakdownDialog(
                         Spacer(Modifier.height(8.dp))
                         breakdown.stages.forEachIndexed { stageIndex, stage ->
                             val stageChecked = selectedStages[stageIndex] == true
-                            LpCard(modifier = Modifier.padding(bottom = 10.dp)) {
+                            LpGlassCard(modifier = Modifier.padding(bottom = 10.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Checkbox(
                                         checked = stageChecked,
@@ -919,3 +988,4 @@ private fun BreakdownDialog(
         },
     )
 }
+

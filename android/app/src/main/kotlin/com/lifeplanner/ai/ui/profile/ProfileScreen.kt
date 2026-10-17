@@ -1,15 +1,26 @@
 package com.lifeplanner.ai.ui.profile
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -78,9 +90,33 @@ fun ProfileScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
-        if (state.loading && !state.loaded) {
-            LpLoading()
-        } else {
+        // 静默刷新（从设置页返回等）：只显示 2dp 细进度条，表单保持可见可读。
+        AnimatedVisibility(
+            visible = state.refreshing,
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(180)),
+        ) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp),
+                color = LpColors.Accent,
+                trackColor = LpColors.SurfaceVariant,
+            )
+        }
+
+        // 首次进入：加载态 → 内容做 220ms 淡入上移；已有内容时不再回到加载态。
+        AnimatedContent(
+            targetState = state.loading && !state.loaded,
+            transitionSpec = {
+                (fadeIn(tween(220)) + slideInVertically(tween(220)) { height -> height / 20 }) togetherWith
+                    fadeOut(tween(160)) using SizeTransform(clip = false)
+            },
+            label = "profile-content",
+        ) { isLoading ->
+            if (isLoading) {
+                LpLoading()
+            } else {
 
         state.message?.let { message ->
             LpBadge(text = message, color = LpColors.Accent)
@@ -195,18 +231,22 @@ fun ProfileScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                 subtitle = "添加技能后，AI 顾问会更了解你的能力结构",
             )
         } else {
-            state.skills.forEach { skill ->
-                SkillRow(
-                    skill = skill,
-                    enabled = state.loadSucceeded,
-                    onEdit = { vm.openEditSkill(skill) },
-                    onDelete = { vm.requestDeleteSkill(skill) },
-                )
-                Spacer(Modifier.height(LpSpacing.sm))
+            state.skills.forEachIndexed { index, skill ->
+                // 前 8 条按 40ms 错峰淡入（DESIGN.md §5）。
+                StaggerIn(index = index) {
+                    SkillRow(
+                        skill = skill,
+                        enabled = state.loadSucceeded,
+                        onEdit = { vm.openEditSkill(skill) },
+                        onDelete = { vm.requestDeleteSkill(skill) },
+                    )
+                    Spacer(Modifier.height(LpSpacing.sm))
+                }
             }
         }
 
         Spacer(Modifier.height(LpSpacing.xl))
+            }
         }
     }
 
@@ -378,4 +418,30 @@ private fun SkillEditorDialog(
         titleContentColor = LpColors.TextPrimary,
         textContentColor = LpColors.TextSecondary,
     )
+}
+
+/**
+ * 列表项错峰进入：前 8 项每项 40ms 延迟，淡入并上移 12dp；超过后一次性显示（性能）。
+ * 设计系统提供公共动效（ui/components/LpMotion.kt 的 lpStaggerIn）后可直接替换。
+ */
+@Composable
+private fun StaggerIn(
+    index: Int,
+    maxAnimated: Int = 8,
+    content: @Composable () -> Unit,
+) {
+    val animated = index < maxAnimated
+    val progress = remember { Animatable(if (animated) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (animated) {
+            delay(index * 40L)
+            progress.animateTo(1f, tween(durationMillis = 220))
+        }
+    }
+    Column(
+        modifier = Modifier.graphicsLayer {
+            alpha = progress.value
+            translationY = (1f - progress.value) * 12.dp.toPx()
+        },
+    ) { content() }
 }

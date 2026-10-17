@@ -36,6 +36,8 @@ data class ReviewUiState(
     val progressError: String? = null,
     val history: List<AiMessage> = emptyList(),
     val historyLoading: Boolean = false,
+    /** 静默刷新历史：已有历史时只做后台更新，避免整块闪 loading。 */
+    val historyRefreshing: Boolean = false,
     val historyError: String? = null,
     val expandedHistoryIds: Set<Long> = emptySet(),
     val message: String? = null,
@@ -109,9 +111,10 @@ class ReviewViewModel(private val container: AppContainer) : ViewModel() {
         // 不允许对未来日期生成复盘（UI 已限制，这里再兜一层）
         if (snapshot.date > Dates.today()) return
 
+        // 重新生成时保留上一份结果：AI 处理中不把已有内容整块换成 loading，
+        // 只叠加一个内联进度提示（结果区在 UI 层淡入更新）。
         _state.value = snapshot.copy(
             generating = true,
-            result = null,
             error = null,
             notConfigured = false,
             selectedGoalIds = emptySet(),
@@ -218,18 +221,29 @@ class ReviewViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun refreshHistory() {
-        _state.value = _state.value.copy(historyLoading = true, historyError = null)
+        // 已有历史时走静默刷新：不显示 loading，只更新数据（ON_RESUME 不再整块闪）。
+        val silent = _state.value.history.isNotEmpty()
+        _state.value = _state.value.copy(
+            historyLoading = !silent,
+            historyRefreshing = silent,
+            historyError = null,
+        )
         viewModelScope.launch {
             try {
                 val list = withContext(Dispatchers.IO) {
                     container.aiMessageRepository.listByMode(MODE_REVIEW, HISTORY_LIMIT)
                 }
-                _state.value = _state.value.copy(history = list, historyLoading = false)
+                _state.value = _state.value.copy(
+                    history = list,
+                    historyLoading = false,
+                    historyRefreshing = false,
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     historyLoading = false,
+                    historyRefreshing = false,
                     historyError = "历史记录加载失败：${e.message ?: "未知错误"}",
                 )
             }

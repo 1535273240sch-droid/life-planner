@@ -30,6 +30,8 @@ import kotlinx.coroutines.withContext
  */
 data class GoalsUiState(
     val loading: Boolean = true,
+    /** 静默刷新：已有目标树时只显示细进度条，不闪成整页 loading。 */
+    val refreshing: Boolean = false,
     val tree: List<GoalNode> = emptyList(),
     val goals: List<Goal> = emptyList(),
     val error: String? = null,
@@ -65,10 +67,18 @@ class GoalsViewModel(private val container: AppContainer) : ViewModel() {
         _state.update { it.copy(message = null) }
     }
 
-    /** 重新读取目标树；silent = true 时不显示整页加载态（用于写操作后的刷新）。 */
+    /**
+     * 重新读取目标树。
+     *
+     * silent = true（写操作后的刷新）或已有目标树时走「静默刷新」：
+     * 保留旧内容，只把 refreshing 置位用于细进度条，避免整页闪 loading。
+     */
     fun refresh(silent: Boolean = false) {
         viewModelScope.launch {
-            if (!silent) {
+            val keepContent = silent || _state.value.tree.isNotEmpty()
+            if (keepContent) {
+                _state.update { it.copy(refreshing = true, error = null) }
+            } else {
                 _state.update { it.copy(loading = true, error = null) }
             }
             try {
@@ -76,13 +86,23 @@ class GoalsViewModel(private val container: AppContainer) : ViewModel() {
                     container.goalService.tree() to container.goalService.list()
                 }
                 _state.update {
-                    it.copy(loading = false, tree = tree, goals = goals, error = null)
+                    it.copy(
+                        loading = false,
+                        refreshing = false,
+                        tree = tree,
+                        goals = goals,
+                        error = null,
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(loading = false, error = "加载目标失败：${e.readable()}")
+                    it.copy(
+                        loading = false,
+                        refreshing = false,
+                        error = "加载目标失败：${e.readable()}",
+                    )
                 }
             }
         }

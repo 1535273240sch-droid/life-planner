@@ -4,6 +4,19 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,20 +27,26 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -50,8 +69,11 @@ import com.lifeplanner.ai.ui.components.LpPrimaryButton
 import com.lifeplanner.ai.ui.components.LpSectionTitle
 import com.lifeplanner.ai.ui.theme.LpColors
 import com.lifeplanner.core.ai.ReviewResult
+import com.lifeplanner.core.model.AiMessage
 import com.lifeplanner.core.model.AiSources
 import com.lifeplanner.core.util.Dates
+import kotlinx.coroutines.delay
+import kotlinx.datetime.LocalDate
 
 /**
  * 复盘页：每日/每周切换、日期选择、生成复盘、危机关怀、进度建议确认、历史记录。
@@ -93,7 +115,7 @@ fun ReviewScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
         }
 
         DateSelector(
-            date = Dates.format(state.date),
+            date = state.date,
             isToday = state.date == Dates.today(),
             canGoNext = state.date < Dates.today(),
             enabled = !state.generating && !state.applyingProgress,
@@ -140,28 +162,65 @@ fun ReviewScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
             }
         }
 
-        if (state.generating) {
-            LpLoading()
+        // AI 生成中：保留上一份结果，只在按钮下方内联显示进度（不整块替换内容）。
+        AnimatedVisibility(
+            visible = state.generating,
+            enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+            exit = fadeOut(tween(120)) + shrinkVertically(tween(180)),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .padding(end = 10.dp)
+                        .size(16.dp),
+                    color = LpColors.Accent,
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    text = "AI 正在生成复盘…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LpColors.TextSecondary,
+                )
+            }
         }
 
-        val result = state.result
-        if (result == null && !state.generating && state.error == null) {
+        // 结果区按「是否有结果」做 220ms 淡入上移切换，避免文字瞬间弹出。
+        AnimatedContent(
+            targetState = state.result,
+            transitionSpec = {
+                (
+                    fadeIn(tween(220)) +
+                        slideInVertically(tween(220)) { height -> height / 24 }
+                    ) togetherWith fadeOut(tween(160)) using SizeTransform(clip = false)
+            },
+            label = "review-result",
+        ) { result ->
+            if (result == null) {
+                // 没有结果时交给下方的空状态 / 错误提示，这里不占位。
+                Unit
+            } else {
+                ResultContent(
+                    result = result,
+                    selectedGoalIds = state.selectedGoalIds,
+                    applyingProgress = state.applyingProgress,
+                    progressMessage = state.progressMessage,
+                    progressError = state.progressError,
+                    onToggleSuggestion = vm::toggleSuggestion,
+                    onApplyProgress = vm::applySelectedProgress,
+                    onDialFailed = vm::notify,
+                )
+            }
+        }
+
+        if (state.result == null && !state.generating && state.error == null) {
             LpEmptyState(
                 title = "还没有生成复盘",
                 subtitle = "选择日期后点击“生成复盘”，AI 会结合任务、日志与目标给出建议。",
-            )
-        }
-
-        if (result != null) {
-            ResultContent(
-                result = result,
-                selectedGoalIds = state.selectedGoalIds,
-                applyingProgress = state.applyingProgress,
-                progressMessage = state.progressMessage,
-                progressError = state.progressError,
-                onToggleSuggestion = vm::toggleSuggestion,
-                onApplyProgress = vm::applySelectedProgress,
-                onDialFailed = vm::notify,
             )
         }
 
@@ -193,7 +252,7 @@ private fun TypeChip(
 
 @Composable
 private fun DateSelector(
-    date: String,
+    date: LocalDate,
     isToday: Boolean,
     canGoNext: Boolean,
     enabled: Boolean,
@@ -207,13 +266,31 @@ private fun DateSelector(
         TextButton(onClick = onPrevious, enabled = enabled) {
             Text("‹ 前一天")
         }
-        Text(
-            text = if (isToday) "$date（今天）" else date,
+        // 日期切换做 180ms 淡入 + 轻微横向滑动，和内容切换同一节奏。
+        AnimatedContent(
+            targetState = date,
             modifier = Modifier.weight(1f),
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.titleMedium,
-            color = LpColors.TextPrimary,
-        )
+            transitionSpec = {
+                val direction = if (targetState > initialState) 1 else -1
+                (
+                    fadeIn(tween(180)) +
+                        slideInHorizontally(tween(180)) { width -> width / 12 * direction }
+                    ) togetherWith fadeOut(tween(120))
+            },
+            label = "review-date-label",
+        ) { currentDate ->
+            Text(
+                text = if (isToday) {
+                    "${Dates.format(currentDate)}（今天）"
+                } else {
+                    Dates.format(currentDate)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.titleMedium,
+                color = LpColors.TextPrimary,
+            )
+        }
         TextButton(onClick = onNext, enabled = enabled && canGoNext) {
             Text("后一天 ›")
         }
@@ -491,6 +568,9 @@ private fun dial(context: Context, rawNumber: String, onFailed: (String) -> Unit
     }
 }
 
+/** 历史区状态：加载 / 错误 / 空 / 内容，用于 AnimatedContent 平滑切换。 */
+private enum class ReviewHistoryPhase { LOADING, ERROR, EMPTY, CONTENT }
+
 @Composable
 private fun HistorySection(
     state: ReviewUiState,
@@ -498,19 +578,47 @@ private fun HistorySection(
     onRetry: () -> Unit,
 ) {
     val error = state.historyError
-    when {
-        state.historyLoading -> LpLoading()
-        error != null -> LpErrorBanner(message = error, onRetry = onRetry)
-        state.history.isEmpty() -> LpEmptyState(
-            title = "暂无复盘历史",
-            subtitle = "生成复盘后会自动保存在这里",
+    // 静默刷新历史：只显示 2dp 细进度条，已有列表保持可见。
+    AnimatedVisibility(
+        visible = state.historyRefreshing,
+        enter = fadeIn(tween(180)),
+        exit = fadeOut(tween(180)),
+    ) {
+        LinearProgressIndicator(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp),
+            color = LpColors.Accent,
+            trackColor = LpColors.SurfaceVariant,
         )
-        else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.history.forEach { message ->
+    }
+    if (error != null && state.history.isNotEmpty()) {
+        LpErrorBanner(message = error, onRetry = onRetry)
+        Spacer(Modifier.height(8.dp))
+    }
+    val phase = when {
+        state.history.isNotEmpty() -> ReviewHistoryPhase.CONTENT
+        state.historyLoading -> ReviewHistoryPhase.LOADING
+        error != null -> ReviewHistoryPhase.ERROR
+        else -> ReviewHistoryPhase.EMPTY
+    }
+    AnimatedContent(
+        targetState = phase,
+        transitionSpec = {
+            (fadeIn(tween(220)) + slideInVertically(tween(220)) { height -> height / 20 }) togetherWith
+                fadeOut(tween(160))
+        },
+        label = "review-history",
+    ) { currentPhase ->
+        when (currentPhase) {
+            ReviewHistoryPhase.CONTENT -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                state.history.forEachIndexed { index, message ->
                 val id = message.id ?: 0L
                 val expanded = id in state.expandedHistoryIds
                 val isCrisis = message.source == AiSources.CRISIS
-                LpCard {
+                // 前 8 条按 40ms 错峰淡入。
+                StaggerIn(index = index) {
+                LpCard(modifier = Modifier.animateContentSize(tween(220))) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -549,7 +657,47 @@ private fun HistorySection(
                         }
                     }
                 }
+                }
+                }
             }
+
+            ReviewHistoryPhase.LOADING -> LpLoading()
+
+            ReviewHistoryPhase.ERROR -> LpErrorBanner(
+                message = error ?: "历史记录加载失败",
+                onRetry = onRetry,
+            )
+
+            ReviewHistoryPhase.EMPTY -> LpEmptyState(
+                title = "暂无复盘历史",
+                subtitle = "生成复盘后会自动保存在这里",
+            )
         }
     }
+}
+
+/**
+ * 列表项错峰进入：前 8 项每项 40ms 延迟，淡入并上移 12dp；超过后一次性显示（性能）。
+ * 设计系统提供公共动效（ui/components/LpMotion.kt 的 lpStaggerIn）后可直接替换。
+ */
+@Composable
+private fun StaggerIn(
+    index: Int,
+    maxAnimated: Int = 8,
+    content: @Composable () -> Unit,
+) {
+    val animated = index < maxAnimated
+    val progress = remember { Animatable(if (animated) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (animated) {
+            delay(index * 40L)
+            progress.animateTo(1f, tween(durationMillis = 220))
+        }
+    }
+    Column(
+        modifier = Modifier.graphicsLayer {
+            alpha = progress.value
+            translationY = (1f - progress.value) * 12.dp.toPx()
+        },
+    ) { content() }
 }

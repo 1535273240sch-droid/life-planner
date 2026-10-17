@@ -3,6 +3,16 @@ package com.lifeplanner.ai.ui.advisor
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -13,13 +23,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,6 +65,7 @@ import com.lifeplanner.ai.ui.theme.LpColors
 import com.lifeplanner.core.ai.AdvisorResult
 import com.lifeplanner.core.model.AiMessage
 import com.lifeplanner.core.model.AiSources
+import kotlinx.coroutines.delay
 
 /** 危机热线：名称 + 展示号码 + 拨号号码（去短横线）。 */
 private data class Hotline(val name: String, val display: String, val dialNumber: String)
@@ -106,34 +121,61 @@ fun AdvisorScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
             onClick = vm::ask,
             enabled = state.question.isNotBlank() && !state.asking,
         )
-        if (state.asking) {
-            LpLoading()
+        // 请求中 / 错误 / 结果 / 空 用 AnimatedContent 做 220ms 淡入上移切换，
+        // 不再让结果区瞬间弹出或整块消失。
+        val responsePhase = when {
+            state.asking -> AdvisorPhase.ASKING
+            state.error != null -> AdvisorPhase.ERROR
+            state.result != null -> AdvisorPhase.RESULT
+            else -> AdvisorPhase.IDLE
         }
+        AnimatedContent(
+            targetState = responsePhase,
+            transitionSpec = {
+                (fadeIn(tween(220)) + slideInVertically(tween(220)) { height -> height / 20 }) togetherWith
+                    fadeOut(tween(160)) using SizeTransform(clip = false)
+            },
+            label = "advisor-response",
+        ) { phase ->
+            when (phase) {
+                AdvisorPhase.ASKING -> LpLoading()
 
-        state.error?.let { message ->
-            Spacer(Modifier.height(LpSpacing.md))
-            LpErrorBanner(
-                message = message,
-                onRetry = if (state.question.isNotBlank()) ({ vm.ask() }) else null,
-            )
-            if (state.notConfigured) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = { onNavigate(NavTarget.SETTINGS) }) {
-                        Text("去设置", color = LpColors.Accent, fontWeight = FontWeight.SemiBold)
+                AdvisorPhase.ERROR -> Column {
+                    state.error?.let { message ->
+                        Spacer(Modifier.height(LpSpacing.md))
+                        LpErrorBanner(
+                            message = message,
+                            onRetry = if (state.question.isNotBlank()) ({ vm.ask() }) else null,
+                        )
+                        if (state.notConfigured) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                TextButton(onClick = { onNavigate(NavTarget.SETTINGS) }) {
+                                    Text(
+                                        text = "去设置",
+                                        color = LpColors.Accent,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            }
-        }
 
-        state.result?.let { result ->
-            Spacer(Modifier.height(LpSpacing.lg))
-            if (result.isCrisis || result.crisis != null) {
-                CrisisCard(result = result, dialError = dialError, onDial = ::dial)
-            } else {
-                AdvisorResultCard(result)
+                AdvisorPhase.RESULT -> Column {
+                    Spacer(Modifier.height(LpSpacing.lg))
+                    state.result?.let { result ->
+                        if (result.isCrisis || result.crisis != null) {
+                            CrisisCard(result = result, dialError = dialError, onDial = ::dial)
+                        } else {
+                            AdvisorResultCard(result)
+                        }
+                    }
+                }
+
+                AdvisorPhase.IDLE -> Unit
             }
         }
 
@@ -144,28 +186,71 @@ fun AdvisorScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
         )
         Spacer(Modifier.height(LpSpacing.sm))
 
-        when {
-            state.historyLoading -> LpLoading()
-
-            state.historyError != null -> LpErrorBanner(
-                message = state.historyError ?: "历史记录读取失败，请重试",
-                onRetry = vm::refreshHistory,
+        // 静默刷新历史：只显示 2dp 细进度条，已有记录保持可见。
+        AnimatedVisibility(
+            visible = state.historyRefreshing,
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(180)),
+        ) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp),
+                color = LpColors.Accent,
+                trackColor = LpColors.SurfaceVariant,
             )
+        }
+        val historyError = state.historyError
+        if (historyError != null && state.history.isNotEmpty()) {
+            LpErrorBanner(message = historyError, onRetry = vm::refreshHistory)
+            Spacer(Modifier.height(LpSpacing.sm))
+        }
+        val historyPhase = when {
+            state.history.isNotEmpty() -> AdvisorHistoryPhase.CONTENT
+            state.historyLoading -> AdvisorHistoryPhase.LOADING
+            state.historyError != null -> AdvisorHistoryPhase.ERROR
+            else -> AdvisorHistoryPhase.EMPTY
+        }
+        AnimatedContent(
+            targetState = historyPhase,
+            transitionSpec = {
+                (fadeIn(tween(220)) + slideInVertically(tween(220)) { height -> height / 20 }) togetherWith
+                    fadeOut(tween(160))
+            },
+            label = "advisor-history",
+        ) { phase ->
+            when (phase) {
+                AdvisorHistoryPhase.CONTENT -> Column {
+                    state.history.forEachIndexed { index, message ->
+                        val key = message.id ?: -(index + 1L)
+                        // 前 8 条按 40ms 错峰淡入。
+                        StaggerIn(index = index) {
+                            HistoryCard(
+                                message = message,
+                                expanded = key in expandedIds,
+                                onToggle = {
+                                    expandedIds = if (key in expandedIds) {
+                                        expandedIds - key
+                                    } else {
+                                        expandedIds + key
+                                    }
+                                },
+                                modifier = Modifier.padding(bottom = LpSpacing.sm),
+                            )
+                        }
+                    }
+                }
 
-            state.history.isEmpty() -> LpEmptyState(
-                title = "还没有咨询记录",
-                subtitle = "提出一个问题，结果会自动保存在本机。",
-            )
+                AdvisorHistoryPhase.LOADING -> LpLoading()
 
-            else -> state.history.forEachIndexed { index, message ->
-                val key = message.id ?: -(index + 1L)
-                HistoryCard(
-                    message = message,
-                    expanded = key in expandedIds,
-                    onToggle = {
-                        expandedIds = if (key in expandedIds) expandedIds - key else expandedIds + key
-                    },
-                    modifier = Modifier.padding(bottom = LpSpacing.sm),
+                AdvisorHistoryPhase.ERROR -> LpErrorBanner(
+                    message = state.historyError ?: "历史记录读取失败，请重试",
+                    onRetry = vm::refreshHistory,
+                )
+
+                AdvisorHistoryPhase.EMPTY -> LpEmptyState(
+                    title = "还没有咨询记录",
+                    subtitle = "提出一个问题，结果会自动保存在本机。",
                 )
             }
         }
@@ -320,7 +405,8 @@ private fun HistoryCard(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LpCard(modifier = modifier, onClick = onToggle) {
+    // 展开/收起用 220ms 高度动画，避免长回答瞬间撑开列表。
+    LpCard(modifier = modifier.animateContentSize(tween(220)), onClick = onToggle) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -364,4 +450,36 @@ private fun conclusionColor(conclusion: String): Color = when (conclusion) {
     "建议做" -> LpColors.Accent
     "不建议做" -> LpColors.Danger
     else -> LpColors.Warning
+}
+
+/** 咨询结果区状态：请求中 / 错误 / 结果 / 空，用于 AnimatedContent 平滑切换。 */
+private enum class AdvisorPhase { ASKING, ERROR, RESULT, IDLE }
+
+/** 历史区状态：加载 / 错误 / 空 / 内容。 */
+private enum class AdvisorHistoryPhase { LOADING, ERROR, EMPTY, CONTENT }
+
+/**
+ * 列表项错峰进入：前 8 项每项 40ms 延迟，淡入并上移 12dp；超过后一次性显示（性能）。
+ * 设计系统提供公共动效（ui/components/LpMotion.kt 的 lpStaggerIn）后可直接替换。
+ */
+@Composable
+private fun StaggerIn(
+    index: Int,
+    maxAnimated: Int = 8,
+    content: @Composable () -> Unit,
+) {
+    val animated = index < maxAnimated
+    val progress = remember { Animatable(if (animated) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (animated) {
+            delay(index * 40L)
+            progress.animateTo(1f, tween(durationMillis = 220))
+        }
+    }
+    Column(
+        modifier = Modifier.graphicsLayer {
+            alpha = progress.value
+            translationY = (1f - progress.value) * 12.dp.toPx()
+        },
+    ) { content() }
 }

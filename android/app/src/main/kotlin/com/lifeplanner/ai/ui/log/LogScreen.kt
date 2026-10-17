@@ -1,5 +1,14 @@
 package com.lifeplanner.ai.ui.log
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,14 +27,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -35,18 +48,20 @@ import com.lifeplanner.ai.AppContainer
 import com.lifeplanner.ai.ui.NavTarget
 import com.lifeplanner.ai.ui.appViewModel
 import com.lifeplanner.ai.ui.components.LpBadge
-import com.lifeplanner.ai.ui.components.LpCard
+import com.lifeplanner.ai.ui.components.LpGlassCard
 import com.lifeplanner.ai.ui.components.LpEmptyState
 import com.lifeplanner.ai.ui.components.LpErrorBanner
 import com.lifeplanner.ai.ui.components.LpLoading
 import com.lifeplanner.ai.ui.components.LpOutlinedField
-import com.lifeplanner.ai.ui.components.LpPrimaryButton
-import com.lifeplanner.ai.ui.components.LpSectionTitle
+import com.lifeplanner.ai.ui.components.LpGradientButton
+import com.lifeplanner.ai.ui.components.LpSectionHeader
 import com.lifeplanner.ai.ui.components.LpSpacing
+import com.lifeplanner.ai.ui.components.lpStaggerIn
 import com.lifeplanner.ai.ui.theme.LpColors
 import com.lifeplanner.core.logic.LogStatsLogic
 import com.lifeplanner.core.model.DailyLog
 import com.lifeplanner.core.util.Dates
+import kotlinx.coroutines.delay
 import kotlinx.datetime.LocalDate
 
 /**
@@ -54,6 +69,7 @@ import kotlinx.datetime.LocalDate
  * 这里不调用任何 AI 能力。
  */
 @Composable
+@Suppress("UNUSED_PARAMETER") // 页面统一签名保留 onNavigate，本页暂无跨页入口
 fun LogScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
     val vm: LogViewModel = appViewModel(container) { LogViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -71,6 +87,22 @@ fun LogScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
             onPrevious = vm::previousDay,
             onNext = vm::nextDay,
         )
+
+        // 静默刷新 / 切换日期时的极细进度条：只占 2dp，不推挤内容、不闪成整屏 loading。
+        AnimatedVisibility(
+            visible = state.refreshing || (state.loading && state.contentDate != null),
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(180)),
+        ) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = LpSpacing.sm)
+                    .height(2.dp),
+                color = LpColors.Accent,
+                trackColor = LpColors.SurfaceVariant,
+            )
+        }
 
         state.error?.let { message ->
             Spacer(Modifier.height(LpSpacing.sm))
@@ -107,24 +139,42 @@ fun LogScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
             LpErrorBanner("请先修正表单中标记的字段，再保存。")
         }
 
-        if (state.loading) {
-            LpLoading()
-        } else if (state.errorFromLoad) {
-            // 加载失败时不展示表单，避免把上一天的旧内容误存到当前日期。
-            LpEmptyState(
-                title = "暂时无法加载这一天",
-                subtitle = "请点击上方“重试”，或切换到其他日期",
-            )
-        } else {
-            LogFormContent(
-                state = state,
-                onUpdate = vm::updateForm,
-                onSave = vm::save,
-            )
+        // 内容区按「已加载的日期」切换：旧内容先留着，新数据回来后再 180ms 淡入 + 横向轻移。
+        // 首次加载（contentDate 为 null）才显示骨架，避免每一次刷新都整块闪。
+        AnimatedContent(
+            targetState = state.contentDate,
+            transitionSpec = {
+                val from = initialState
+                val to = targetState
+                val forward = from != null && to != null && to > from
+                val direction = if (forward) 1 else -1
+                (
+                    fadeIn(tween(180)) +
+                        slideInHorizontally(tween(180)) { width -> width / 16 * direction }
+                    ) togetherWith
+                    fadeOut(tween(120)) using SizeTransform(clip = false)
+            },
+            label = "log-date-content",
+        ) { contentDate ->
+            when {
+                contentDate != null -> LogFormContent(
+                    state = state,
+                    onUpdate = vm::updateForm,
+                    onSave = vm::save,
+                )
+
+                state.loading -> LpLoading()
+
+                // 加载失败时不展示表单，避免把上一天的旧内容误存到当前日期。
+                else -> LpEmptyState(
+                    title = "暂时无法加载这一天",
+                    subtitle = "请点击上方“重试”，或切换到其他日期",
+                )
+            }
         }
 
         Spacer(Modifier.height(LpSpacing.xl))
-        LpSectionTitle("最近 7 天")
+        LpSectionHeader("最近 7 天")
         Spacer(Modifier.height(LpSpacing.sm))
         RecentLogs(
             logs = state.recentLogs,
@@ -163,7 +213,7 @@ private fun DateSwitcher(
     onNext: () -> Unit,
 ) {
     val canGoNext = !state.loading && !state.saving && state.selectedDate < state.today
-    LpCard {
+    LpGlassCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(
                 onClick = onPrevious,
@@ -174,20 +224,33 @@ private fun DateSwitcher(
                     color = if (!state.loading && !state.saving) LpColors.Info else LpColors.TextMuted,
                 )
             }
-            Column(
+            // 日期标题单独做 180ms 淡入 + 轻微横向滑动，和内容切换保持同一节奏。
+            AnimatedContent(
+                targetState = state.selectedDate,
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = Dates.format(state.selectedDate),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = LpColors.TextPrimary,
-                )
-                Text(
-                    text = if (state.selectedDate == state.today) "今天" else "历史记录",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (state.selectedDate == state.today) LpColors.Accent else LpColors.TextMuted,
-                )
+                transitionSpec = {
+                    val direction = if (targetState > initialState) 1 else -1
+                    (
+                        fadeIn(tween(180)) +
+                            slideInHorizontally(tween(180)) { width -> width / 12 * direction }
+                        ) togetherWith (
+                        fadeOut(tween(120))
+                        )
+                },
+                label = "log-date-label",
+            ) { date ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = Dates.format(date),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = LpColors.TextPrimary,
+                    )
+                    Text(
+                        text = if (date == state.today) "今天" else "历史记录",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (date == state.today) LpColors.Accent else LpColors.TextMuted,
+                    )
+                }
             }
             TextButton(onClick = onNext, enabled = canGoNext) {
                 Text(
@@ -207,13 +270,14 @@ private fun LogFormContent(
 ) {
     val form = state.form
     val errors = state.fieldErrors
-    // 保存期间禁用所有输入，避免“已保存”之后的新编辑没有落库。
-    val canEdit = !state.saving
+    // 保存期间禁用所有输入，避免“已保存”之后的新编辑没有落库；
+    // 切换日期加载中也禁用，防止把上一天的内容改动写进新日期。
+    val canEdit = !state.saving && !state.loading
 
     Spacer(Modifier.height(LpSpacing.lg))
-    LpSectionTitle("今日完成")
+    LpSectionHeader("今日完成")
     Spacer(Modifier.height(LpSpacing.sm))
-    LpCard {
+    LpGlassCard {
         LpOutlinedField(
             value = form.doneItems,
             onValueChange = { value -> onUpdate { it.copy(doneItems = value) } },
@@ -226,9 +290,9 @@ private fun LogFormContent(
     }
 
     Spacer(Modifier.height(LpSpacing.lg))
-    LpSectionTitle("学习")
+    LpSectionHeader("学习")
     Spacer(Modifier.height(LpSpacing.sm))
-    LpCard {
+    LpGlassCard {
         LpOutlinedField(
             value = form.studyMinutes,
             onValueChange = { value -> onUpdate { it.copy(studyMinutes = value) } },
@@ -256,9 +320,9 @@ private fun LogFormContent(
     }
 
     Spacer(Modifier.height(LpSpacing.lg))
-    LpSectionTitle("三餐 / 加餐")
+    LpSectionHeader("三餐 / 加餐")
     Spacer(Modifier.height(LpSpacing.sm))
-    LpCard {
+    LpGlassCard {
         LpOutlinedField(
             value = form.breakfast,
             onValueChange = { value -> onUpdate { it.copy(breakfast = value) } },
@@ -293,9 +357,9 @@ private fun LogFormContent(
     }
 
     Spacer(Modifier.height(LpSpacing.lg))
-    LpSectionTitle("睡眠")
+    LpSectionHeader("睡眠")
     Spacer(Modifier.height(LpSpacing.sm))
-    LpCard {
+    LpGlassCard {
         Row(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
                 LpOutlinedField(
@@ -328,9 +392,9 @@ private fun LogFormContent(
     }
 
     Spacer(Modifier.height(LpSpacing.lg))
-    LpSectionTitle("运动")
+    LpSectionHeader("运动")
     Spacer(Modifier.height(LpSpacing.sm))
-    LpCard {
+    LpGlassCard {
         LpOutlinedField(
             value = form.exerciseType,
             onValueChange = { value -> onUpdate { it.copy(exerciseType = value) } },
@@ -356,9 +420,9 @@ private fun LogFormContent(
     }
 
     Spacer(Modifier.height(LpSpacing.lg))
-    LpSectionTitle("状态")
+    LpSectionHeader("状态")
     Spacer(Modifier.height(LpSpacing.sm))
-    LpCard {
+    LpGlassCard {
         ScoreSelector(
             label = "心情",
             value = form.mood,
@@ -383,9 +447,9 @@ private fun LogFormContent(
     }
 
     Spacer(Modifier.height(LpSpacing.lg))
-    LpSectionTitle("反思")
+    LpSectionHeader("反思")
     Spacer(Modifier.height(LpSpacing.sm))
-    LpCard {
+    LpGlassCard {
         LpOutlinedField(
             value = form.reflection,
             onValueChange = { value -> onUpdate { it.copy(reflection = value) } },
@@ -398,10 +462,12 @@ private fun LogFormContent(
     }
 
     Spacer(Modifier.height(LpSpacing.xl))
-    LpPrimaryButton(
-        text = if (state.saving) "保存中…" else "保存记录",
+    // 保存中由按钮内联 spinner 表达，文案保持不变，避免按钮宽度跳动。
+    LpGradientButton(
+        text = "保存记录",
         onClick = onSave,
         enabled = !state.saving && !state.loading,
+        loading = state.saving,
     )
 }
 
@@ -475,9 +541,12 @@ private fun RecentLogs(
             subtitle = "保存今天的记录后会显示在这里",
         )
     } else {
-        for (log in logs) {
-        LpCard(
-            modifier = Modifier.padding(bottom = LpSpacing.sm),
+        logs.forEachIndexed { index, log ->
+        // 前 8 条按 40ms 错峰淡入，超过后一次性显示（设计系统动效令牌）。
+        LpGlassCard(
+            modifier = Modifier
+                .padding(bottom = LpSpacing.sm)
+                .lpStaggerIn(index),
             onClick = { onClick(log.date) },
         ) {
             Row(
@@ -522,6 +591,32 @@ private fun RecentLogs(
         }
     }
     }
+}
+
+/**
+ * 列表项错峰进入：前 8 项每项 40ms 延迟，淡入并上移 12dp。
+ * 设计系统提供公共动效（ui/components/LpMotion.kt 的 lpStaggerIn）后可直接替换。
+ */
+@Composable
+private fun StaggerIn(
+    index: Int,
+    maxAnimated: Int = 8,
+    content: @Composable () -> Unit,
+) {
+    val animated = index < maxAnimated
+    val progress = remember { Animatable(if (animated) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (animated) {
+            delay(index * 40L)
+            progress.animateTo(1f, tween(durationMillis = 220))
+        }
+    }
+    Box(
+        modifier = Modifier.graphicsLayer {
+            alpha = progress.value
+            translationY = (1f - progress.value) * 12.dp.toPx()
+        },
+    ) { content() }
 }
 
 private fun formatHours(hours: Double): String =

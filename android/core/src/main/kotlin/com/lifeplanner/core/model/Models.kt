@@ -114,7 +114,7 @@ data class DailyLog(
 
 data class AiMessage(
     val id: Long? = null,
-    /** daily_plan / advisor / review / breakdown */
+    /** daily_plan / advisor / review / breakdown / capture（首页一句话整理） */
     val mode: String,
     val question: String? = null,
     val answer: String,

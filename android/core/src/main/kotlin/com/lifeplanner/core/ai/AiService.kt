@@ -4,6 +4,7 @@ import com.lifeplanner.core.model.AiMessage
 import com.lifeplanner.core.model.AiSources
 import com.lifeplanner.core.model.DailyLog
 import com.lifeplanner.core.model.Goal
+import com.lifeplanner.core.model.GoalLevels
 import com.lifeplanner.core.model.GoalStatuses
 import com.lifeplanner.core.model.Task
 import com.lifeplanner.core.port.AiMessageRepository
@@ -219,6 +220,290 @@ class AiService(
             source = AiSources.AI_MODEL,
             modelName = config.model,
         )
+    }
+
+    // ------------------------------------------------------------------
+    // 一句话整理
+    // ------------------------------------------------------------------
+
+    /**
+     * 把用户的一句话整理成“待确认”的结构化草稿。
+     *
+     * 流程与其它模式一致：本地危机筛查（命中即完全离线短路）→ 配置检查 → 调模型 → 严格校验。
+     * 关键约束：**这里只读不写业务库**。用户确认前绝不产生任务 / 目标 / 日志，
+     * 唯一的写入是一条 mode="capture" 的历史，便于之后回看 AI 当时整理了什么。
+     */
+    fun organizeCapture(rawInput: String, today: LocalDate = Dates.today()): CaptureResult {
+        // 危机优先于一切：命中后不联网、不整理，直接给出关怀与求助渠道（宁多勿漏，见 CrisisGuard）
+        CrisisGuard.check(rawInput)?.let { crisis ->
+            val full = CrisisGuard.fullText(crisis)
+            saveMessage("capture", rawInput, full, AiSources.CRISIS, null)
+            return CaptureResult(
+                reply = full,
+                log = null,
+                isCrisis = true,
+                source = AiSources.CRISIS,
+                modelName = null,
+                fullText = full,
+                crisis = crisis,
+            )
+        }
+
+        ensureConfigured()
+        val context = buildContext(today)
+        val prompt = CapturePrompts.capturePrompt(context, rawInput, today)
+        val data = JsonExtract.extractObject(callModel(prompt, 0.3))
+
+        // reply 是用户唯一必读字段：缺了它这次整理就没有交付物，按模型违约处理，不拿空串糊弄
+        val reply = JsonExtract.requireStringField(data, "reply")
+        // goal_id 只认“进行中且未删除”的真实目标，避免把任务挂到不存在/已删除的目标上
+        val goalMap = activeGoals().mapNotNull { g -> g.id?.let { it to g } }.toMap()
+        val log = parseCaptureLog(data["log"])
+        val tasks = parseCaptureTasks(data["tasks"], goalMap)
+        val goals = parseCaptureGoals(data["goals"])
+
+        val fullText = captureFullText(reply, log, tasks, goals)
+        saveMessage("capture", rawInput, fullText, AiSources.AI_MODEL, config.model)
+        return CaptureResult(
+            reply = reply,
+            log = log,
+            tasks = tasks,
+            goals = goals,
+            isCrisis = false,
+            source = AiSources.AI_MODEL,
+            modelName = config.model,
+            fullText = fullText,
+        )
+    }
+
+    /**
+     * 用户确认后把草稿合并落库，返回**真实写入**的数量（没有真的插入就不计数）。
+     *
+     * 合并口径（与“用户没说就不动”一致）：
+     * - 日志：草稿里 null 的字段保留数据库原值；meals 按 key 合并；同一天仍是一条记录。
+     * - 任务：同一天按标题去重，已存在的不重复插入；goalId 不存在则置 null。
+     * - 目标：与未删除目标按标题去重；新建的一律进行中、进度 0。
+     *
+     * 危机结果与空草稿不写库：危机时用户需要的是求助信息，自动落库反而是打扰。
+     * 分步写入，不保证事务：中途失败可能已写入了部分数据，调用方应提示用户重试前先刷新。
+     */
+    fun applyCapture(result: CaptureResult, today: LocalDate = Dates.today()): CaptureApplied {
+        if (result.isCrisis) return CaptureApplied()
+
+        var logSaved = false
+        result.log?.takeIf { !it.isEmpty }?.let { draft ->
+            logRepo.upsert(mergeDailyLog(logRepo.findByDate(today), draft, today))
+            logSaved = true
+        }
+
+        // 用同一个 Set 同时承担“草稿内部去重”和“跳过当天已有任务”，避免漏掉任一种重复
+        val knownTaskTitles = taskRepo.listByDate(today).mapTo(HashSet()) { it.title }
+        var tasksInserted = 0
+        for (draft in result.tasks) {
+            // applyCapture 是公开入口，可能被界面用手工草稿调用，所以这里再兜一次底
+            val title = draft.title.trim().take(MAX_TASK_TITLE)
+            if (title.isEmpty() || !knownTaskTitles.add(title)) continue
+            val goalId = draft.goalId?.takeIf { goalRepo.findById(it) != null }
+            val minutes = draft.estMinutes.takeIf { it in 1..MAX_MINUTES } ?: DEFAULT_TASK_MINUTES
+            taskRepo.insert(
+                Task(goalId = goalId, date = today, title = title, estMinutes = minutes, done = false),
+            )
+            tasksInserted++
+        }
+
+        val knownGoalTitles = goalRepo.list().mapTo(HashSet()) { it.title }
+        var goalsInserted = 0
+        for (draft in result.goals) {
+            val title = draft.title.trim().take(MAX_GOAL_TITLE)
+            if (title.isEmpty() || !knownGoalTitles.add(title)) continue
+            goalRepo.insert(
+                Goal(
+                    level = normalizeGoalLevel(draft.level),
+                    title = title,
+                    category = normalizeGoalCategory(draft.category),
+                    description = draft.description?.trim()?.takeIf { it.isNotEmpty() },
+                    metric = draft.metric?.trim()?.takeIf { it.isNotEmpty() },
+                    // 开始日就是用户确认新建的今天：这是真实事实，不是补出来的数据
+                    startDate = today,
+                    status = GoalStatuses.IN_PROGRESS,
+                ),
+            )
+            goalsInserted++
+        }
+
+        return CaptureApplied(tasksInserted = tasksInserted, goalsInserted = goalsInserted, logSaved = logSaved)
+    }
+
+    // ------------------------------------------------------------------
+    // 一句话整理的解析与校验
+    // ------------------------------------------------------------------
+
+    /**
+     * 记录草稿：整块缺失 / 不是对象 / 校验后全空都返回 null。
+     * 全空返回 null 是为了让界面直接隐藏“记录”区块，而不是展示一张空表。
+     */
+    private fun parseCaptureLog(raw: Any?): CaptureLogDraft? {
+        val m = JsonExtract.asMap(raw) ?: return null
+        val draft = CaptureLogDraft(
+            studyMinutes = captureMinutes(m["study_minutes"]),
+            studyNote = captureText(m["study_note"]),
+            sleepStart = captureClock(m["sleep_start"]),
+            sleepEnd = captureClock(m["sleep_end"]),
+            exerciseType = captureText(m["exercise_type"]),
+            exerciseMinutes = captureMinutes(m["exercise_minutes"]),
+            mood = captureScore(m["mood"]),
+            energy = captureScore(m["energy"]),
+            meals = captureMeals(m["meals"]),
+            doneItems = captureText(m["done_items"]),
+            reflection = captureText(m["reflection"]),
+        )
+        return draft.takeIf { !it.isEmpty }
+    }
+
+    /** 任务草稿：标题非空、≤200 字、同标题去重、最多 6 个；越界时长回落 30 分钟。 */
+    private fun parseCaptureTasks(raw: Any?, goalMap: Map<Long, Goal>): List<CaptureTaskDraft> {
+        val items = raw as? List<*> ?: return emptyList()
+        val out = ArrayList<CaptureTaskDraft>(minOf(items.size, CapturePrompts.MAX_TASKS))
+        val seen = HashSet<String>()
+        for (item in items) {
+            if (out.size >= CapturePrompts.MAX_TASKS) break
+            val m = JsonExtract.asMap(item) ?: continue
+            val title = captureText(m["title"])?.take(MAX_TASK_TITLE) ?: continue
+            // 模型常把同一件事换个说法拆两遍；重复插入会让今日清单出现两条一模一样的任务
+            if (!seen.add(title)) continue
+            val goal = JsonExtract.asLongOrNull(m["goal_id"])?.let { goalMap[it] }
+            val minutes = JsonExtract.asLongOrNull(m["est_minutes"])?.toInt()
+                ?.takeIf { it in 1..MAX_MINUTES } ?: DEFAULT_TASK_MINUTES
+            out += CaptureTaskDraft(
+                title = title,
+                estMinutes = minutes,
+                goalId = goal?.id,
+                goalName = goal?.title ?: "",
+            )
+        }
+        return out
+    }
+
+    /** 目标草稿：标题非空、≤100 字、最多 2 个；非法层级/分类回落到 weekly / 生活。 */
+    private fun parseCaptureGoals(raw: Any?): List<CaptureGoalDraft> {
+        val items = raw as? List<*> ?: return emptyList()
+        val out = ArrayList<CaptureGoalDraft>(CapturePrompts.MAX_GOALS)
+        for (item in items) {
+            if (out.size >= CapturePrompts.MAX_GOALS) break
+            val m = JsonExtract.asMap(item) ?: continue
+            val title = captureText(m["title"])?.take(MAX_GOAL_TITLE) ?: continue
+            out += CaptureGoalDraft(
+                title = title,
+                level = normalizeGoalLevel(m["level"] as? String),
+                category = normalizeGoalCategory(m["category"] as? String),
+                description = captureText(m["description"]),
+                metric = captureText(m["metric"]),
+            )
+        }
+        return out
+    }
+
+    /** 0..1440 的整数分钟；越界 / 非整数 / 非数字字符串一律视为“没提到”。 */
+    private fun captureMinutes(raw: Any?): Int? =
+        JsonExtract.asLongOrNull(raw)?.toInt()?.takeIf { it in 0..MAX_MINUTES }
+
+    /** 心情/精力 1..5；越界视为没提到（宁可空着，也不替用户猜一个分数）。 */
+    private fun captureScore(raw: Any?): Int? =
+        JsonExtract.asLongOrNull(raw)?.toInt()?.takeIf { it in 1..5 }
+
+    /** 自由文本：去空白后为空则视为没提到。 */
+    private fun captureText(raw: Any?): String? = (raw as? String)?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** 时间只接受 24 小时制 HH:MM；“7:5”“晚上11点”这类模糊值一律置 null，不猜。 */
+    private fun captureClock(raw: Any?): String? {
+        val s = (raw as? String)?.trim() ?: return null
+        return s.takeIf { CLOCK_RE.matches(it) }
+    }
+
+    /** 只保留契约约定的四个餐次：模型自造 key（如“夜宵”）会污染记录展示与统计。 */
+    private fun captureMeals(raw: Any?): Map<String, String> {
+        val m = JsonExtract.asMap(raw) ?: return emptyMap()
+        val out = LinkedHashMap<String, String>(MEAL_KEYS.size)
+        for (key in MEAL_KEYS) {
+            val value = captureText(m[key]) ?: continue
+            out[key] = value
+        }
+        return out
+    }
+
+    /** 层级不在 GoalLevels.RANK 内就回落 weekly：契约默认值，也是用户最常新建的层级。 */
+    private fun normalizeGoalLevel(raw: String?): String {
+        val level = raw?.trim()?.lowercase() ?: return GoalLevels.WEEKLY
+        return if (GoalLevels.rankOf(level) != null) level else GoalLevels.WEEKLY
+    }
+
+    /** 分类不在白名单内回落“生活”：宁可粗一点，也不让模型自造的分类散落到目标列表里。 */
+    private fun normalizeGoalCategory(raw: String?): String {
+        val category = raw?.trim() ?: return DEFAULT_GOAL_CATEGORY
+        return if (category in CapturePrompts.GOAL_CATEGORIES) category else DEFAULT_GOAL_CATEGORY
+    }
+
+    /** 日志合并：草稿非 null 的字段覆盖，null 保留数据库原值；meals 按 key 合并。 */
+    private fun mergeDailyLog(existing: DailyLog?, draft: CaptureLogDraft, today: LocalDate): DailyLog {
+        val base = existing ?: DailyLog(date = today)
+        return base.copy(
+            studyMinutes = draft.studyMinutes ?: base.studyMinutes,
+            studyNote = draft.studyNote ?: base.studyNote,
+            sleepStart = draft.sleepStart ?: base.sleepStart,
+            sleepEnd = draft.sleepEnd ?: base.sleepEnd,
+            exerciseType = draft.exerciseType ?: base.exerciseType,
+            exerciseMinutes = draft.exerciseMinutes ?: base.exerciseMinutes,
+            mood = draft.mood ?: base.mood,
+            energy = draft.energy ?: base.energy,
+            meals = if (draft.meals.isEmpty()) base.meals else base.meals + draft.meals,
+            doneItems = draft.doneItems ?: base.doneItems,
+            reflection = draft.reflection ?: base.reflection,
+        )
+    }
+
+    /** 历史记录里保存的可读全文：用户回看时能一眼看出 AI 当时整理出了哪些草稿。 */
+    private fun captureFullText(
+        reply: String,
+        log: CaptureLogDraft?,
+        tasks: List<CaptureTaskDraft>,
+        goals: List<CaptureGoalDraft>,
+    ): String = buildString {
+        append("【回应】: ").append(reply)
+        if (log != null) {
+            val lines = ArrayList<String>()
+            if (log.studyMinutes != null || log.studyNote != null) {
+                val parts = ArrayList<String>(2)
+                log.studyMinutes?.let { parts += "$it 分钟" }
+                log.studyNote?.let { parts += it }
+                lines += "- 学习: " + parts.joinToString("，")
+            }
+            if (log.sleepStart != null || log.sleepEnd != null) {
+                lines += "- 睡眠: " + (log.sleepStart ?: "?") + "-" + (log.sleepEnd ?: "?")
+            }
+            if (log.exerciseType != null || log.exerciseMinutes != null) {
+                lines += "- 运动: " + (log.exerciseType ?: "运动") + " " + (log.exerciseMinutes ?: 0) + " 分钟"
+            }
+            if (log.mood != null || log.energy != null) {
+                lines += "- 心情/精力: " + (log.mood ?: "?") + "/5, " + (log.energy ?: "?") + "/5"
+            }
+            if (log.meals.isNotEmpty()) {
+                lines += "- 饮食: " + log.meals.entries.joinToString("，") { "${it.key}:${it.value}" }
+            }
+            log.doneItems?.let { lines += "- 产出: $it" }
+            log.reflection?.let { lines += "- 反思: $it" }
+            if (lines.isNotEmpty()) {
+                append("\n\n【整理出的今日记录（待确认）】\n")
+                append(lines.joinToString("\n"))
+            }
+        }
+        if (tasks.isNotEmpty()) {
+            append("\n\n【整理出的任务（待确认）】\n")
+            append(tasks.joinToString("\n") { "- ${it.title}（${it.estMinutes} 分钟）" })
+        }
+        if (goals.isNotEmpty()) {
+            append("\n\n【整理出的新目标（待确认）】\n")
+            append(goals.joinToString("\n") { "- ${it.title}（${it.level} / ${it.category}）" })
+        }
     }
 
     // ------------------------------------------------------------------
@@ -558,5 +843,16 @@ class AiService(
         )
         private val WEEK_RE = Regex("[-*•\\d\\.\\s\\[\\]]*(第\\s*[\\d\\-一二三四五六七八九十]+\\s*周[^\\n\\r]*)")
         private val WEEKLY_LINE_RE = Regex("第\\s*[\\d\\-一二三四五六七八九十]+\\s*周")
+        private const val MAX_MINUTES = 1440
+        private const val DEFAULT_TASK_MINUTES = 30
+        private const val MAX_TASK_TITLE = 200
+        private const val MAX_GOAL_TITLE = 100
+        private const val DEFAULT_GOAL_CATEGORY = "生活"
+
+        /** 睡眠时间格式：24 小时制 HH:MM（与任务书约定的校验正则完全一致）。 */
+        private val CLOCK_RE = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
+
+        /** 记录里合法的餐次 key，与 DailyLog.meals 的约定一致。 */
+        private val MEAL_KEYS = listOf("breakfast", "lunch", "dinner", "snack")
     }
 }

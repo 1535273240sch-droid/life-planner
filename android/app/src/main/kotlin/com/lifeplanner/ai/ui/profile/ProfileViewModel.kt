@@ -21,6 +21,8 @@ import kotlinx.coroutines.withContext
  */
 data class ProfileUiState(
     val loading: Boolean = true,
+    /** 静默刷新：已加载过内容时只显示细进度条，不把整页替换成 loading。 */
+    val refreshing: Boolean = false,
     val loaded: Boolean = false,
     /** 只有成功从仓储读取过档案，才允许保存：避免加载失败后用空表单覆盖旧档案。 */
     val loadSucceeded: Boolean = false,
@@ -78,49 +80,78 @@ class ProfileViewModel(private val container: AppContainer) : ViewModel() {
         refresh()
     }
 
+    /**
+     * 读取档案 + 技能。
+     *
+     * 已成功加载过内容时走静默刷新：保留表单与技能列表，只显示细进度条；
+     * 首次加载或上次失败时才显示整页加载态。
+     * 请求在途期间用户若已开始编辑（dirty），返回结果绝不覆盖表单。
+     */
     fun refresh() {
         if (refreshing) return
         refreshing = true
         viewModelScope.launch {
+            val silent = _state.value.loaded
             _state.update {
-                it.copy(loading = true, loadError = null, loadSucceeded = false)
+                it.copy(
+                    loading = !silent,
+                    refreshing = silent,
+                    loadError = null,
+                    // 静默刷新时保留上一次的成功标记，避免输入框突然变灰不可编辑。
+                    loadSucceeded = if (silent) it.loadSucceeded else false,
+                )
             }
             try {
                 val (profile, skills) = withContext(Dispatchers.IO) {
                     container.profileRepository.get() to container.skillRepository.list()
                 }
                 _state.update { s ->
-                    s.copy(
-                        loading = false,
-                        loaded = true,
-                        loadSucceeded = true,
-                        dirty = false,
-                        loadError = null,
-                        profileId = profile?.id,
-                        age = profile?.age?.toString().orEmpty(),
-                        gender = profile?.gender.orEmpty(),
-                        occupation = profile?.occupation.orEmpty(),
-                        industry = profile?.industry.orEmpty(),
-                        yearsOfWork = profile?.yearsOfWork?.toString().orEmpty(),
-                        education = profile?.education.orEmpty(),
-                        major = profile?.major.orEmpty(),
-                        height = profile?.healthInfo?.get(KEY_HEIGHT).orEmpty(),
-                        weight = profile?.healthInfo?.get(KEY_WEIGHT).orEmpty(),
-                        sleepHabit = profile?.healthInfo?.get(KEY_SLEEP_HABIT).orEmpty(),
-                        dietPref = profile?.healthInfo?.get(KEY_DIET_PREF).orEmpty(),
-                        taboo = profile?.healthInfo?.get(KEY_TABOO).orEmpty(),
-                        allergyOrDisease = profile?.healthInfo?.get(KEY_ALLERGY).orEmpty(),
-                        vision = profile?.vision.orEmpty(),
-                        constraints = profile?.constraints.orEmpty(),
-                        skills = skills,
-                    )
+                    if (s.dirty) {
+                        // 有未保存编辑：只更新技能列表与加载状态，不覆盖用户正在输入的档案。
+                        s.copy(
+                            loading = false,
+                            refreshing = false,
+                            loaded = true,
+                            loadSucceeded = true,
+                            loadError = null,
+                            skills = skills,
+                        )
+                    } else {
+                        s.copy(
+                            loading = false,
+                            refreshing = false,
+                            loaded = true,
+                            loadSucceeded = true,
+                            dirty = false,
+                            loadError = null,
+                            profileId = profile?.id,
+                            age = profile?.age?.toString().orEmpty(),
+                            gender = profile?.gender.orEmpty(),
+                            occupation = profile?.occupation.orEmpty(),
+                            industry = profile?.industry.orEmpty(),
+                            yearsOfWork = profile?.yearsOfWork?.toString().orEmpty(),
+                            education = profile?.education.orEmpty(),
+                            major = profile?.major.orEmpty(),
+                            height = profile?.healthInfo?.get(KEY_HEIGHT).orEmpty(),
+                            weight = profile?.healthInfo?.get(KEY_WEIGHT).orEmpty(),
+                            sleepHabit = profile?.healthInfo?.get(KEY_SLEEP_HABIT).orEmpty(),
+                            dietPref = profile?.healthInfo?.get(KEY_DIET_PREF).orEmpty(),
+                            taboo = profile?.healthInfo?.get(KEY_TABOO).orEmpty(),
+                            allergyOrDisease = profile?.healthInfo?.get(KEY_ALLERGY).orEmpty(),
+                            vision = profile?.vision.orEmpty(),
+                            constraints = profile?.constraints.orEmpty(),
+                            skills = skills,
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _state.update {
+                    // 静默刷新失败时保留上次成功加载的数据与 loadSucceeded，只提示错误；
+                    // 首次加载失败则保持 loadSucceeded = false，禁止用空表单覆盖仓储。
                     it.copy(
                         loading = false,
+                        refreshing = false,
                         loaded = true,
-                        loadSucceeded = false,
                         loadError = "读取档案失败：${e.readable()}",
                     )
                 }

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知栏小图标：必须是纯白单色剪影（系统会自动着色），所以直接用一片叶子 + 短茎表达“生长”。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,13.2c-0.2,-3.1 0.9,-5.6 3.3,-7.6 0.7,-0.6 1.5,-1.1 2.4,-1.5 0.3,1.1 0.5,2.1 0.5,3.1 0,3.9 -2.3,6.4 -6.2,7.1z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M10.8,13.5C8.4,12.7 6.6,11 5.5,8.3 5,7.1 4.7,5.8 4.6,4.4c1.4,0.1 2.6,0.5 3.7,1.1 2.6,1.4 3.9,3.6 3.9,6.6 0,0.5 -0.1,1 -0.3,1.4z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11.1,15.3h1.8v5.4h-1.8z" />
+
+</vector>

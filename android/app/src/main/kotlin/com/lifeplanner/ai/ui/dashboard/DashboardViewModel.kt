@@ -5,7 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.lifeplanner.ai.AppContainer
 import com.lifeplanner.core.ai.AiErrorCodes
 import com.lifeplanner.core.ai.AiException
+import com.lifeplanner.core.ai.CaptureApplied
+import com.lifeplanner.core.ai.CaptureResult
 import com.lifeplanner.core.ai.DailyPlanResult
+import com.lifeplanner.core.daily.DailyQuote
+import com.lifeplanner.core.daily.DailyQuotes
 import com.lifeplanner.core.model.LifeGap
 import com.lifeplanner.core.model.StatsOverview
 import com.lifeplanner.core.model.StatsTrends
@@ -19,6 +23,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /** 今日任务 + 关联目标名（目标已删除时为空）。 */
 data class DashboardTaskItem(
@@ -40,6 +47,25 @@ data class DashboardUiState(
     val sleepHours: List<Double?> = emptyList(),
     val gaps: List<LifeGap> = emptyList(),
     val error: String? = null,
+    // ---- 首页头部 / 每日一句：纯本地内容，不依赖网络，未配置 Key 也有内容 ----
+    val greeting: String = "",
+    val dateLabel: String = "",
+    val quote: DailyQuote? = null,
+    // ---- AI 一句话整理：草稿先展示，用户勾选确认后才落库 ----
+    val captureOpen: Boolean = false,
+    val captureInput: String = "",
+    val captureBusy: Boolean = false,
+    val captureResult: CaptureResult? = null,
+    /** 勾选要保存的任务下标（默认全选）。 */
+    val captureSelectedTasks: Set<Int> = emptySet(),
+    /** 勾选要保存的目标下标（默认全选）。 */
+    val captureSelectedGoals: Set<Int> = emptySet(),
+    val captureError: String? = null,
+    /** 未配置 API Key：界面需要给出「去设置」入口。 */
+    val captureNotConfigured: Boolean = false,
+    val captureSaving: Boolean = false,
+    /** 保存成功提示：由界面消费（Snackbar + 轻震动）后清空。 */
+    val captureMessage: String? = null,
     // ---- AI 今日计划：生成结果先展示，用户确认后才写库 ----
     val planLoading: Boolean = false,
     val planResult: DailyPlanResult? = null,
@@ -53,15 +79,50 @@ data class DashboardUiState(
 
 class DashboardViewModel(private val container: AppContainer) : ViewModel() {
 
-    private val _state = MutableStateFlow(DashboardUiState())
+    private val _state = MutableStateFlow(
+        // 问候语 / 日期 / 每日一句都是纯本地内容：构造时就给值，首页首帧不会空着或闪一下。
+        DashboardUiState(
+            greeting = DailyQuotes.greeting(
+                Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour,
+            ),
+            dateLabel = DailyQuotes.dateLabel(Dates.today()),
+            quote = DailyQuotes.forDate(Dates.today()),
+        ),
+    )
     val state: StateFlow<DashboardUiState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
 
-    /** 首次加载 / 手动重试 / 回到前台：显示整页 loading。 */
+    /** 当前已加载数据所属的日期；跨天后必须重取，否则首页会一直显示昨天的数字。 */
+    private var loadedDate: kotlinx.datetime.LocalDate? = null
+
+    /** 上次成功加载的时间戳，用于判断缓存是否新鲜。 */
+    private var lastLoadedAtMs: Long = 0L
+
+    /**
+     * 首页重新可见时调用。
+     *
+     * 与旧实现的区别：不再每次 ON_RESUME 都整块重载——切换页面回来会命中当天缓存，
+     * 只有跨天（数据已不属于今天）或缓存过期才真正取数，避免整屏闪 loading。
+     * 需要强制刷新时用 [forceRefresh]（保存成功、勾选任务等本地写操作之后）。
+     */
     fun refresh() {
-        // 避免首次组合的 LaunchedEffect 与 ON_RESUME 同时触发重复取数。
         if (loadJob?.isActive == true) return
+        val today = Dates.today()
+        val hasData = _state.value.overview != null
+        if (hasData && loadedDate == today &&
+            System.currentTimeMillis() - lastLoadedAtMs < CACHE_REUSE_MS
+        ) {
+            // 数据属于今天且足够新：只刷新随时间变化的本本文案（问候语可能跨过整点），不重新取数。
+            applyDateText(today)
+            return
+        }
+        // 已有内容时走静默刷新：保留旧内容，只在后台替换，避免闪屏。
+        load(showFullLoading = !hasData)
+    }
+
+    /** 绕过缓存立即重取（本地写库之后用，保证首页与刚写入的数据一致）。 */
+    fun forceRefresh() {
         load(showFullLoading = _state.value.overview == null)
     }
 
@@ -84,9 +145,9 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
             }
             val days = _state.value.trendDays
             try {
+                val today = Dates.today()
                 val snapshot = withContext(Dispatchers.IO) {
                     // 每次刷新都重新取当天日期：应用在后台跨过午夜后，ON_RESUME 会拿到新的一天。
-                    val today = Dates.today()
                     val overview = container.logService.overview(today)
                     val goalsById = container.goalRepository.list()
                         .mapNotNull { goal -> goal.id?.let { it to goal.title } }
@@ -101,6 +162,8 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
                     val gaps = container.logService.detectGaps(today)
                     DashboardSnapshot(overview, Dates.monthDay(today), tasks, trends, gaps)
                 }
+                loadedDate = today
+                lastLoadedAtMs = System.currentTimeMillis()
                 _state.update {
                     it.copy(
                         loading = false,
@@ -113,12 +176,16 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
                         sleepHours = snapshot.trends.sleepHours,
                         gaps = snapshot.gaps,
                         error = null,
+                        greeting = DailyQuotes.greeting(currentHour()),
+                        dateLabel = DailyQuotes.dateLabel(today),
+                        quote = DailyQuotes.forDate(today),
                     )
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.update {
+                    // 静默刷新失败时保留旧内容，只把错误放在横幅上，不把页面清空。
                     it.copy(
                         loading = false,
                         refreshing = false,
@@ -127,6 +194,17 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
                     )
                 }
             }
+        }
+    }
+
+    /** 只更新与"今天"有关、随本机时钟变化的文案。 */
+    private fun applyDateText(today: kotlinx.datetime.LocalDate) {
+        _state.update {
+            it.copy(
+                greeting = DailyQuotes.greeting(currentHour()),
+                dateLabel = DailyQuotes.dateLabel(today),
+                quote = DailyQuotes.forDate(today),
+            )
         }
     }
 
@@ -141,8 +219,8 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
                         doneAtIso = if (done) Dates.nowIso() else null,
                     )
                 }
-                // 只刷新数据，不重新显示整页 loading。
-                load(showFullLoading = false)
+                // 本地写完必须重取，否则缓存会让勾选状态看起来没生效。
+                forceRefresh()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -157,6 +235,222 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
             }
         }
     }
+
+    // ------------------------------------------------------------------
+    // AI 一句话整理（弹窗）
+    // ------------------------------------------------------------------
+
+    fun openCapture() {
+        _state.update {
+            it.copy(captureOpen = true, captureError = null, captureNotConfigured = false)
+        }
+    }
+
+    /** 关闭弹窗：保留输入与结果，用户误触关闭后重新打开不用重说一遍。 */
+    fun closeCapture() {
+        _state.update { it.copy(captureOpen = false) }
+    }
+
+    fun onCaptureInputChange(text: String) {
+        // 不在这里偷偷截断：超长由界面禁用按钮并提示，用户知道自己写多了。
+        _state.update { it.copy(captureInput = text, captureError = null) }
+    }
+
+    /** 调 AI 整理：只生成草稿，不写库。 */
+    fun organizeCapture() {
+        val current = _state.value
+        if (current.captureBusy || current.captureSaving) return
+        val input = current.captureInput.trim()
+        if (input.isEmpty()) {
+            _state.update { it.copy(captureError = "先说一句话吧") }
+            return
+        }
+        if (input.length > MAX_CAPTURE_INPUT) {
+            _state.update {
+                it.copy(captureError = "太长了（${input.length} 字），请精简到 $MAX_CAPTURE_INPUT 字以内")
+            }
+            return
+        }
+        _state.update {
+            it.copy(
+                captureBusy = true,
+                captureResult = null,
+                captureSelectedTasks = emptySet(),
+                captureSelectedGoals = emptySet(),
+                captureError = null,
+                captureNotConfigured = false,
+                captureMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    // 每次重新读设置构造服务：用户刚在设置里填完 Key，回来就能用。
+                    container.aiService().organizeCapture(input, Dates.today())
+                }
+                _state.update {
+                    it.copy(
+                        captureBusy = false,
+                        captureResult = result,
+                        captureSelectedTasks = result.tasks.indices.toSet(),
+                        captureSelectedGoals = result.goals.indices.toSet(),
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: AiException) {
+                _state.update {
+                    it.copy(
+                        captureBusy = false,
+                        captureError = e.message,
+                        captureNotConfigured = e.code == AiErrorCodes.NOT_CONFIGURED,
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        captureBusy = false,
+                        captureError = "整理失败：${
+                            e.message?.takeIf { msg -> msg.isNotBlank() }
+                                ?: e.javaClass.simpleName
+                        }",
+                    )
+                }
+            }
+        }
+    }
+
+    fun toggleCaptureTask(index: Int) {
+        _state.update { current ->
+            if (index !in (current.captureResult?.tasks?.indices ?: IntRange.EMPTY)) return@update current
+            val next = current.captureSelectedTasks.toMutableSet()
+            if (!next.add(index)) next.remove(index)
+            current.copy(captureSelectedTasks = next)
+        }
+    }
+
+    fun toggleCaptureGoal(index: Int) {
+        _state.update { current ->
+            if (index !in (current.captureResult?.goals?.indices ?: IntRange.EMPTY)) return@update current
+            val next = current.captureSelectedGoals.toMutableSet()
+            if (!next.add(index)) next.remove(index)
+            current.copy(captureSelectedGoals = next)
+        }
+    }
+
+    /** 重新整理：清掉当前草稿，保留用户原话。 */
+    fun resetCapture() {
+        _state.update {
+            it.copy(
+                captureBusy = false,
+                captureSaving = false,
+                captureResult = null,
+                captureSelectedTasks = emptySet(),
+                captureSelectedGoals = emptySet(),
+                captureError = null,
+                captureNotConfigured = false,
+                captureMessage = null,
+            )
+        }
+    }
+
+    /**
+     * 保存勾选内容。
+     *
+     * 先在本地按勾选过滤 [CaptureResult]，再交给 core 的 applyCapture 落库：
+     * 未勾选的任务/目标绝不能因为"AI 生成过"就被写进数据库。
+     */
+    fun saveCapture() {
+        val current = _state.value
+        val result = current.captureResult ?: return
+        if (current.captureBusy || current.captureSaving) return
+        if (result.isCrisis) {
+            // 危机短路返回的是安全关怀文案，不是待落库草稿。
+            _state.update { it.copy(captureError = "这次没有需要保存的内容，先照顾好自己。") }
+            return
+        }
+        val tasks = result.tasks.filterIndexed { index, _ -> index in current.captureSelectedTasks }
+        val goals = result.goals.filterIndexed { index, _ -> index in current.captureSelectedGoals }
+        val log = result.log?.takeUnless { it.isEmpty }
+        if (tasks.isEmpty() && goals.isEmpty() && log == null) {
+            _state.update {
+                it.copy(
+                    captureError = if (current.captureSelectedTasks.isEmpty() && current.captureSelectedGoals.isEmpty()) {
+                        "还没有勾选任何内容，请先勾选任务或目标"
+                    } else {
+                        "这次没有可保存的内容，可以重新整理一次"
+                    },
+                )
+            }
+            return
+        }
+
+        _state.update { it.copy(captureSaving = true, captureError = null, captureMessage = null) }
+        viewModelScope.launch {
+            try {
+                val applied: CaptureApplied = withContext(Dispatchers.IO) {
+                    container.aiService().applyCapture(
+                        result = result.copy(tasks = tasks, goals = goals, log = log),
+                        today = Dates.today(),
+                    )
+                }
+                _state.update {
+                    it.copy(
+                        captureSaving = false,
+                        captureOpen = false,
+                        captureInput = "",
+                        captureResult = null,
+                        captureSelectedTasks = emptySet(),
+                        captureSelectedGoals = emptySet(),
+                        captureMessage = describeApplied(applied),
+                    )
+                }
+                // 刚写入任务/目标/记录：强刷首页，让用户马上看到结果。
+                forceRefresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: AiException) {
+                _state.update {
+                    it.copy(
+                        captureSaving = false,
+                        captureError = e.message,
+                        captureNotConfigured = e.code == AiErrorCodes.NOT_CONFIGURED,
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        captureSaving = false,
+                        captureError = "保存失败：${
+                            e.message?.takeIf { msg -> msg.isNotBlank() }
+                                ?: e.javaClass.simpleName
+                        }",
+                    )
+                }
+            }
+        }
+    }
+
+    /** 界面消费完 Snackbar 提示后调用，避免旋转屏幕时重复弹。 */
+    fun consumeCaptureMessage() {
+        _state.update { it.copy(captureMessage = null) }
+    }
+
+    private fun describeApplied(applied: CaptureApplied): String {
+        val parts = ArrayList<String>(3)
+        if (applied.tasksInserted > 0) parts.add("${applied.tasksInserted} 项任务")
+        if (applied.goalsInserted > 0) parts.add("${applied.goalsInserted} 个目标")
+        if (applied.logSaved) parts.add("今日记录")
+        return if (parts.isEmpty()) {
+            "没有新增内容：同名任务或目标可能已存在"
+        } else {
+            "已整理并保存：${parts.joinToString("、")}"
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // AI 今日计划
+    // ------------------------------------------------------------------
 
     /**
      * AI 生成今日计划（只生成、不落库）。
@@ -276,7 +570,7 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
                     )
                 }
                 // 刷新今日任务列表（以及统计等），不重新显示整页 loading。
-                load(showFullLoading = false)
+                forceRefresh()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -293,6 +587,9 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    private fun currentHour(): Int =
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
+
     private data class DashboardSnapshot(
         val overview: StatsOverview,
         val todayLabel: String,
@@ -300,4 +597,12 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
         val trends: StatsTrends,
         val gaps: List<LifeGap>,
     )
+
+    companion object {
+        /** 一句话整理输入上限：超过后按钮禁用并提示（DESIGN 第 7 节）。 */
+        const val MAX_CAPTURE_INPUT = 2000
+
+        /** 当天数据在这段时间内视为新鲜：快速来回切页面时不重复取数。 */
+        private const val CACHE_REUSE_MS = 60_000L
+    }
 }

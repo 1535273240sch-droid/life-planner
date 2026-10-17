@@ -1,6 +1,6 @@
 # 人生智能编排体 (Life Planner AI) - Android 工程
 
-包名 `com.lifeplanner.ai`，当前版本 `2.0.4`（versionCode 7）。
+包名 `com.lifeplanner.ai`，当前版本 `2.1.0`（versionCode 8）。
 
 v2.0.0 起这是**完全自包含的原生 Android 应用**：Kotlin + Jetpack Compose + 手机本地 SQLite（SQLDelight）。
 不再使用 WebView，不再需要电脑端 FastAPI 服务，也不加载任何 CDN 资源。
@@ -15,14 +15,17 @@ android/
 │   └── src/main/kotlin/com/lifeplanner/core/
 │       ├── model/              # Profile / Skill / Goal / Task / DailyLog / AiMessage / 统计结构
 │       ├── logic/              # 目标树、父级/成环校验、进度状态机、记录、统计、缺口检测
-│       ├── ai/                 # 提示词、危机筛查、JSON 提取、AiService、错误码
+│       ├── ai/                 # 提示词、危机筛查、JSON 提取、AiService（含一句话整理）、错误码
+│       ├── daily/              # 每日一句内容池 + 推送时间纯逻辑
 │       ├── json/               # JSON 备份导出/导入（含 id 重映射）
 │       ├── data/               # SQLDelight 仓储实现
 │       └── db/                 # 表结构（Tables.sq）与查询（Queries.sq）
 ├── app/                        # Android 接入层
 │   └── src/main/kotlin/com/lifeplanner/ai/
 │       ├── LifePlannerApp.kt   # Application + AppContainer（手动 DI）
-│       ├── ui/                 # 7 个 Compose 页面、通用组件、主题、导航
+│       ├── ui/                 # 7 个 Compose 页面、通用组件、Aurora Ink 主题、导航
+│       ├── ui/dashboard/CaptureSheet.kt  # 首页「AI 一句话整理」弹窗
+│       ├── notify/             # 每日推送（渠道/闹钟/开机重排/通知导航）
 │       ├── data/SettingsStore.kt
 │       └── net/OkHttpTransport.kt
 ├── gradlew / gradlew.bat / gradle/wrapper/   # 已提交的 Gradle Wrapper 8.4
@@ -36,6 +39,8 @@ android/
 - **AI 可选**：在「设置」里填写 OpenAI 兼容端点的 API Key / Base URL / 模型名后启用顾问、复盘、目标拆解。
   - 未配置或请求失败时显示真实的中文错误，不会用模板冒充 AI。
   - 调用前先做本地危机关键词筛查；命中即短路，不发出网络请求，并显示 24 小时热线。
+- **一句话整理**：首页弹窗里输入自由文本，AI 整理成生活记录 / 今日任务 / 新目标，勾选确认后才落库。
+- **每日推送**：早间能量 + 晚间复盘两次本地推送，可开关/改时间；内容离线生成，不耗 AI 额度。
 - **数据导出**：设置页通过系统文件选择器导出单个 JSON；导入为覆盖式（有二次确认）。
 - **隐私**：配置 Key 后，档案、技能、进行中目标与近 7 天日志（含健康数据）会发送给所选模型服务商。
 
@@ -63,12 +68,17 @@ Windows 下也可以双击 `build_apk.bat`。
 > 注意：如果项目路径包含中文，本工程已在 `gradle.properties` 中设置
 > `android.overridePathCheck=true`；若某些 Kotlin/AGP 版本仍报路径错误，
 > 请把仓库复制到纯 ASCII 路径下构建。
+>
+> 实测：**中文路径下 `:core:test` / `:app:testDebugUnitTest` 会因 Gradle 测试进程
+> 无法加载 classpath 报 `ClassNotFoundException`**（不是测试失败）。构建 APK 不受影响；
+> 需要跑测试时把仓库复制到纯 ASCII 路径（如 `C:\lpbuild`）再执行，或直接用
+> 仓库自带的 `tools/verify.ps1`（自动镜像到 ASCII 目录）。
 
 ### 测试
 
 ```bash
-./gradlew :core:test              # 96 个纯 JVM 单元测试
-./gradlew :app:testDebugUnitTest  # Robolectric 冒烟（建库/仓储/备份/AI 错误路径）
+./gradlew :core:test              # 122 个纯 JVM 单元测试
+./gradlew :app:testDebugUnitTest  # 14 个 Robolectric 测试（建库/仓储/备份/AI 错误路径/MainActivity 启动）
 ```
 
 ### GitHub Actions

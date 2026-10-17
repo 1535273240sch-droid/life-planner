@@ -8,7 +8,11 @@ import com.lifeplanner.ai.data.AiConfigRules
 import com.lifeplanner.ai.data.AiProvider
 import com.lifeplanner.ai.net.ModelListClient
 import com.lifeplanner.ai.net.ModelListException
+import com.lifeplanner.ai.notify.PushAlarmScheduler
+import com.lifeplanner.ai.notify.PushNotifier
 import com.lifeplanner.core.ai.AiConfig
+import com.lifeplanner.core.daily.PushConfig
+import com.lifeplanner.core.daily.PushKind
 import com.lifeplanner.core.json.ImportMode
 import com.lifeplanner.core.json.ImportSummary
 import kotlinx.coroutines.Dispatchers
@@ -17,7 +21,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 data class SettingsUiState(
     val loading: Boolean = true,
@@ -42,6 +51,8 @@ data class SettingsUiState(
     val pendingImportText: String? = null,
     /** 最近一次导入的统计 */
     val importSummary: ImportSummary? = null,
+    /** 每日推送配置（两个时段是否开启、各自的时分） */
+    val pushConfig: PushConfig = PushConfig(),
 )
 
 /**
@@ -57,10 +68,15 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     private val modelListClient = ModelListClient()
 
+    /** 串行化推送配置的写盘与重排，避免连续操作时 IO 乱序。 */
+    private val pushWriteMutex = Mutex()
+
     fun load() {
         viewModelScope.launch {
             try {
-                val config = withContext(Dispatchers.IO) { container.settings.loadAiConfig() }
+                val (config, push) = withContext(Dispatchers.IO) {
+                    container.settings.loadAiConfig() to container.settings.loadPushConfig()
+                }
                 _state.update {
                     it.copy(
                         loading = false,
@@ -69,6 +85,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
                         model = config.model,
                         // 已保存的是公网 http 时，保持开关打开并显示警告，避免用户困惑。
                         allowInsecureHttp = AiConfigRules.isPublicHttp(config.baseUrl),
+                        pushConfig = push,
                     )
                 }
             } catch (e: Exception) {
@@ -293,6 +310,93 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
             } catch (e: Exception) {
                 _state.update { it.copy(busy = false, error = "清空失败：${readable(e)}") }
             }
+        }
+    }
+
+    // ---------------------------------------------------------------- 每日推送
+
+    /**
+     * 推送配置的每次改动都走这里：先更新界面状态，再把配置写盘并立刻重排闹钟。
+     *
+     * “保存即重排”是硬要求：用户把早间从 07:30 改成 08:00 后，必须马上生效，
+     * 否则要等到下一次触发才更新，用户会以为设置没保存。
+     * 用 Mutex 串行化写盘：连续拖两次开关时，避免两次 IO 乱序导致最终落盘的是旧配置。
+     */
+    private fun updatePushConfig(transform: (PushConfig) -> PushConfig) {
+        val next = transform(_state.value.pushConfig).sanitized()
+        _state.update { it.copy(pushConfig = next, error = null) }
+        viewModelScope.launch {
+            try {
+                pushWriteMutex.withLock {
+                    withContext(Dispatchers.IO) {
+                        container.settings.savePushConfig(next)
+                        // 重排放在 IO：读 SharedPreferences 可能触发一次磁盘加载。
+                        // 两个时段都关时 schedule 内部会 cancel 掉已有闹钟。
+                        PushAlarmScheduler(container.appContext).schedule(next)
+                    }
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "保存推送设置失败：${readable(e)}") }
+            }
+        }
+    }
+
+    fun onPushMorningEnabled(enabled: Boolean) {
+        updatePushConfig { it.copy(morningEnabled = enabled) }
+    }
+
+    fun onPushEveningEnabled(enabled: Boolean) {
+        updatePushConfig { it.copy(eveningEnabled = enabled) }
+    }
+
+    fun onPushMorningTime(hour: Int, minute: Int) {
+        updatePushConfig { it.copy(morningHour = hour, morningMinute = minute) }
+    }
+
+    fun onPushEveningTime(hour: Int, minute: Int) {
+        updatePushConfig { it.copy(eveningHour = hour, eveningMinute = minute) }
+    }
+
+    /**
+     * 立即发一条早间样式的通知，用来验证权限与渠道是否正常。
+     * 不修改配置、不排闹钟，只验证“能不能弹出来”。
+     */
+    fun sendTestPush() {
+        if (_state.value.busy) return
+        viewModelScope.launch {
+            try {
+                val date = withContext(Dispatchers.IO) {
+                    Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+                }
+                val shown = withContext(Dispatchers.IO) {
+                    PushNotifier(container.appContext).show(PushKind.MORNING, date)
+                }
+                _state.update {
+                    if (shown) {
+                        it.copy(message = "测试通知已发送；若没看到，请检查系统通知权限", error = null)
+                    } else {
+                        it.copy(
+                            error = "系统未允许通知，测试通知无法显示。请先在系统设置中允许本应用的通知。",
+                            message = null,
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "发送测试通知失败：${readable(e)}") }
+            }
+        }
+    }
+
+    /**
+     * 通知权限被拒绝。
+     * 不再重复申请（系统会直接拒绝且不再弹窗），改为在设置页给出明确的去授权入口。
+     */
+    fun onNotificationPermissionDenied() {
+        _state.update {
+            it.copy(
+                error = "通知权限被拒绝，推送不会显示。可点「去允许通知」在系统设置里开启。",
+                message = null,
+            )
         }
     }
 

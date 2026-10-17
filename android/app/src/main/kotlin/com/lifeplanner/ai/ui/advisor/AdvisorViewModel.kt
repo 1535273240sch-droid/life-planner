@@ -31,6 +31,8 @@ data class AdvisorUiState(
     val notConfigured: Boolean = false,
     val history: List<AiMessage> = emptyList(),
     val historyLoading: Boolean = false,
+    /** 静默刷新历史：已有记录时只做后台更新，不把列表整块换成 loading。 */
+    val historyRefreshing: Boolean = false,
     val historyError: String? = null,
 )
 
@@ -83,20 +85,38 @@ class AdvisorViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    /** 重新读取最近 20 条顾问历史（仓储按 id 倒序返回）。 */
+    /** 重新读取最近 20 条顾问历史（仓储按 id 倒序返回）；已有记录时静默刷新。 */
     fun refreshHistory() {
-        _state.update { it.copy(historyLoading = it.history.isEmpty(), historyError = null) }
+        val silent = _state.value.history.isNotEmpty()
+        _state.update {
+            it.copy(
+                historyLoading = !silent,
+                historyRefreshing = silent,
+                historyError = null,
+            )
+        }
         viewModelScope.launch {
             try {
                 val list = withContext(Dispatchers.IO) {
                     container.aiMessageRepository.listByMode("advisor", 20)
                 }
-                _state.update { it.copy(history = list, historyLoading = false, historyError = null) }
+                _state.update {
+                    it.copy(
+                        history = list,
+                        historyLoading = false,
+                        historyRefreshing = false,
+                        historyError = null,
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(historyLoading = false, historyError = "历史记录读取失败，请重试")
+                    it.copy(
+                        historyLoading = false,
+                        historyRefreshing = false,
+                        historyError = "历史记录读取失败，请重试",
+                    )
                 }
             }
         }

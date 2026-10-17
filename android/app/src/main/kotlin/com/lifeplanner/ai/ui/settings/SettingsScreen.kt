@@ -1,5 +1,6 @@
 package com.lifeplanner.ai.ui.settings
 
+import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -24,14 +25,20 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,13 +48,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeplanner.ai.AppContainer
 import com.lifeplanner.ai.data.AiConfigRules
 import com.lifeplanner.ai.data.AiProviders
+import com.lifeplanner.ai.notify.PushPermissions
 import com.lifeplanner.ai.ui.NavTarget
 import com.lifeplanner.ai.ui.appViewModel
 import com.lifeplanner.ai.ui.components.LpCard
@@ -78,6 +91,40 @@ fun SettingsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
 
     var showApiKey by rememberSaveable { mutableStateOf(false) }
     var showClearConfirm by rememberSaveable { mutableStateOf(false) }
+    var showMorningPicker by rememberSaveable { mutableStateOf(false) }
+    var showEveningPicker by rememberSaveable { mutableStateOf(false) }
+
+    // 系统权限可能在任何时候变化（用户去设置页开关通知、厂商撤销精确闹钟），
+    // 所以在每次 ON_RESUME 时重新读取，而不是只在进入页面时读一次。
+    var permissionVersion by remember { mutableStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) permissionVersion++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val notificationsGranted = remember(permissionVersion) {
+        PushPermissions.notificationsGranted(context)
+    }
+    val exactAlarmsGranted = remember(permissionVersion) {
+        PushPermissions.canScheduleExactAlarms(context)
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        permissionVersion++
+        if (!granted) vm.onNotificationPermissionDenied()
+    }
+
+    /** 开启推送开关时顺带申请通知权限：已授权或系统低于 Android 13 时什么都不做。 */
+    val ensureNotificationPermission: () -> Unit = {
+        if (PushPermissions.shouldRequestNotificationPermission() && !notificationsGranted) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json"),
@@ -150,6 +197,32 @@ fun SettingsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                 TextButton(onClick = { showClearConfirm = false }) {
                     Text("取消", color = LpColors.TextMuted)
                 }
+            },
+        )
+    }
+
+    if (showMorningPicker) {
+        LpTimePickerDialog(
+            title = "早间推送时间",
+            initialHour = state.pushConfig.morningHour,
+            initialMinute = state.pushConfig.morningMinute,
+            onDismiss = { showMorningPicker = false },
+            onConfirm = { hour, minute ->
+                showMorningPicker = false
+                vm.onPushMorningTime(hour, minute)
+            },
+        )
+    }
+
+    if (showEveningPicker) {
+        LpTimePickerDialog(
+            title = "晚间推送时间",
+            initialHour = state.pushConfig.eveningHour,
+            initialMinute = state.pushConfig.eveningMinute,
+            onDismiss = { showEveningPicker = false },
+            onConfirm = { hour, minute ->
+                showEveningPicker = false
+                vm.onPushEveningTime(hour, minute)
             },
         )
     }
@@ -293,6 +366,86 @@ fun SettingsScreen(container: AppContainer, onNavigate: (NavTarget) -> Unit) {
                 LpPrimaryButton(
                     text = "保存并立即生效",
                     onClick = vm::saveConfig,
+                    enabled = !state.busy,
+                )
+            }
+
+            // ---- 每日推送 ----
+            LpCard {
+                LpSectionTitle("每日推送")
+                Spacer(Modifier.height(LpSpacing.sm))
+                LpHint(
+                    "每天两次固定提醒：每日一句 + 生活 / 学习 / 工作提醒，晚间换成复盘提醒。" +
+                        "内容全部在本地生成，不联网、不消耗 AI 额度；修改后立即生效。",
+                )
+                Spacer(Modifier.height(LpSpacing.md))
+
+                PushTimeRow(
+                    title = "早间能量",
+                    subtitle = "带着今天的提醒开始",
+                    enabled = state.pushConfig.morningEnabled,
+                    onEnabledChange = { on ->
+                        vm.onPushMorningEnabled(on)
+                        if (on) ensureNotificationPermission()
+                    },
+                    hour = state.pushConfig.morningHour,
+                    minute = state.pushConfig.morningMinute,
+                    onTimeClick = { showMorningPicker = true },
+                )
+                Spacer(Modifier.height(LpSpacing.md))
+                PushTimeRow(
+                    title = "晚间复盘",
+                    subtitle = "回顾今天，定下明天的第一步",
+                    enabled = state.pushConfig.eveningEnabled,
+                    onEnabledChange = { on ->
+                        vm.onPushEveningEnabled(on)
+                        if (on) ensureNotificationPermission()
+                    },
+                    hour = state.pushConfig.eveningHour,
+                    minute = state.pushConfig.eveningMinute,
+                    onTimeClick = { showEveningPicker = true },
+                )
+
+                // 权限引导：精确说明“为什么收不到”，并给一个能直接点的出口，
+                // 而不是只写一句“请检查权限”。
+                if (!notificationsGranted) {
+                    Spacer(Modifier.height(LpSpacing.md))
+                    LpHint(
+                        "系统通知权限未开启，推送不会被显示。允许后无需重启应用，返回本页即生效。",
+                        warn = true,
+                    )
+                    Spacer(Modifier.height(LpSpacing.sm))
+                    SecondaryButton(
+                        text = "去允许通知",
+                        onClick = {
+                            runCatching {
+                                context.startActivity(PushPermissions.notificationSettingsIntent(context))
+                            }
+                        },
+                    )
+                }
+
+                if (!exactAlarmsGranted) {
+                    Spacer(Modifier.height(LpSpacing.md))
+                    LpHint(
+                        "系统未允许「闹钟与提醒」，推送可能延迟几分钟。允许后可按设定时间准点提醒。",
+                        warn = true,
+                    )
+                    Spacer(Modifier.height(LpSpacing.sm))
+                    SecondaryButton(
+                        text = "允许精确提醒",
+                        onClick = {
+                            runCatching {
+                                PushPermissions.exactAlarmSettingsIntent(context)?.let { context.startActivity(it) }
+                            }
+                        },
+                    )
+                }
+
+                Spacer(Modifier.height(LpSpacing.md))
+                SecondaryButton(
+                    text = "发送测试通知",
+                    onClick = vm::sendTestPush,
                     enabled = !state.busy,
                 )
             }
@@ -490,5 +643,105 @@ private fun SecondaryButton(
         ),
     ) {
         Text(text, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+/** 一行推送设置：开关 + 可点击的时间。时间按钮在关闭时禁用，避免误以为改时间就能收到推送。 */
+@Composable
+private fun PushTimeRow(
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    hour: Int,
+    minute: Int,
+    onTimeClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = LpColors.TextPrimary,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = LpColors.TextMuted,
+            )
+        }
+        TextButton(onClick = onTimeClick, enabled = enabled) {
+            Text(
+                text = formatPushTime(hour, minute),
+                style = MaterialTheme.typography.titleMedium,
+                color = if (enabled) LpColors.Accent else LpColors.TextMuted,
+            )
+        }
+        Switch(checked = enabled, onCheckedChange = onEnabledChange)
+    }
+}
+
+/** 07:30 这种展示格式；用补零保证时间列宽度稳定，不会因为 9:05 左右跳。 */
+private fun formatPushTime(hour: Int, minute: Int): String =
+    "%02d:%02d".format(hour.coerceIn(0, 23), minute.coerceIn(0, 59))
+
+/**
+ * 时间选择对话框。
+ *
+ * Material3 没有现成的 TimePicker 对话框，这里用 Dialog + Surface 包一层；
+ * 平台的默认对话框宽度比时钟表盘窄，会把表盘裁掉，所以关掉 usePlatformDefaultWidth
+ * 并只留 16dp 外边距。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LpTimePickerDialog(
+    title: String,
+    initialHour: Int,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (hour: Int, minute: Int) -> Unit,
+) {
+    val pickerState = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+        is24Hour = true,
+    )
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = LpColors.Surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = LpColors.TextPrimary,
+                )
+                Spacer(Modifier.height(LpSpacing.md))
+                TimePicker(state = pickerState)
+                Spacer(Modifier.height(LpSpacing.sm))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("取消", color = LpColors.TextMuted)
+                    }
+                    TextButton(onClick = { onConfirm(pickerState.hour, pickerState.minute) }) {
+                        Text("确定", color = LpColors.Accent)
+                    }
+                }
+            }
+        }
     }
 }

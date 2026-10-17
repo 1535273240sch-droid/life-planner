@@ -7,6 +7,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- 每日推送：Android 13+ 弹通知需要运行时授权；重启/改时间/改时区后要重排闹钟 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 精确闹钟：推送要尽量准点；用户撤销授权时代码会退化为非精确闹钟 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <application
         android:name=".LifePlannerApp"
         android:allowBackup="false"
@@ -29,6 +35,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 推送到点触发：只由本应用的 PendingIntent 唤起，不需要对外暴露 -->
+        <receiver
+            android:name=".notify.PushAlarmReceiver"
+            android:exported="false" />
+
+        <!-- 重启 / 改时间 / 改时区后重排闹钟。系统广播来自 framework，必须 exported -->
+        <receiver
+            android:name=".notify.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

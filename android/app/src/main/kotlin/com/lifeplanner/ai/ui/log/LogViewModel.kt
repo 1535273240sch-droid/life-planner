@@ -41,6 +41,15 @@ data class LogUiState(
     val selectedDate: LocalDate = Dates.today(),
     val today: LocalDate = Dates.today(),
     val loading: Boolean = true,
+    /** 静默刷新：已有内容时只显示极细进度条，绝不把整页替换成 loading。 */
+    val refreshing: Boolean = false,
+    /**
+     * 当前 [form] 对应的日期。
+     *
+     * 与 [selectedDate] 分开，是为了让「切换日期」不闪：先保留旧日期的内容，
+     * 等新日期的数据真正返回后再整体淡入上移切换；为 null 表示还没有任何内容。
+     */
+    val contentDate: LocalDate? = null,
     val saving: Boolean = false,
     val error: String? = null,
     /** 错误是否来自加载（决定错误条是否显示“重试”）。 */
@@ -95,7 +104,8 @@ class LogViewModel(private val container: AppContainer) : ViewModel() {
                 pendingDate = null,
             )
         }
-        load(target, withRecent = true)
+        // 静默刷新：已经有内容就保留，避免每次回到页面都整屏闪一下 loading。
+        load(target, withRecent = true, silent = true)
     }
 
     fun retry() {
@@ -148,6 +158,7 @@ class LogViewModel(private val container: AppContainer) : ViewModel() {
                 pendingDate = null,
             )
         }
+        // 非静默：内容仍然是旧日期的，等新数据返回后再由 UI 做 180ms 淡入滑动切换。
         load(safe, withRecent = false)
     }
 
@@ -225,11 +236,19 @@ class LogViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun load(date: LocalDate, withRecent: Boolean) {
+    /**
+     * 读取指定日期。
+     *
+     * [silent] = true 且当前内容就是这一天时，不清空内容、不显示整页 loading，
+     * 只置 refreshing（用于 ON_RESUME 的静默刷新）。其余情况仍走完整加载态。
+     */
+    private fun load(date: LocalDate, withRecent: Boolean, silent: Boolean = false) {
         val seq = ++loadSeq
+        val keepContent = silent && _state.value.contentDate == date
         _state.update {
             it.copy(
-                loading = true,
+                loading = !keepContent,
+                refreshing = keepContent,
                 error = null,
                 errorFromLoad = false,
                 message = null,
@@ -251,10 +270,14 @@ class LogViewModel(private val container: AppContainer) : ViewModel() {
             if (seq != loadSeq) return@launch
             result.onSuccess { (log, recent) ->
                 _state.update {
+                    // 请求在途时用户可能已经开始输入：有未保存编辑就不覆盖表单，避免吃掉输入。
+                    val form = if (it.dirty) it.form else log?.toForm() ?: LogForm()
                     it.copy(
                         loading = false,
-                        dirty = false,
-                        form = log?.toForm() ?: LogForm(),
+                        refreshing = false,
+                        dirty = it.dirty,
+                        form = form,
+                        contentDate = date,
                         recentLogs = recent ?: it.recentLogs,
                         today = Dates.today(),
                     )
@@ -263,6 +286,9 @@ class LogViewModel(private val container: AppContainer) : ViewModel() {
                 _state.update {
                     it.copy(
                         loading = false,
+                        refreshing = false,
+                        // 只有确实没有这一天的内容时才清空内容区；已有内容时保留并只提示错误。
+                        contentDate = if (it.contentDate == date) it.contentDate else null,
                         error = "加载记录失败：${readable(e)}",
                         errorFromLoad = true,
                     )
